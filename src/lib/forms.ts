@@ -52,7 +52,6 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
       continue;
     }
     const qId = String(question.questionId || raw.itemId || Math.random());
-    const rawTitle = (questionItem.question as Record<string, unknown>) ? (raw.title as string) || (question as Record<string, unknown>).title as string || "무제" : "무제";
     // actual title is in item.title
     const qTitle = (raw.title as string) || "무제 문항";
     const required = Boolean(question.required);
@@ -69,7 +68,6 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
     let options: string[] | undefined;
 
     if (textQuestion !== undefined) {
-      const isParagraph = (raw as Record<string, unknown>).kind ? false : true;
       // heuristic: if choiceQuestion missing and textQuestion exists, check paragraph flag
       // Forms API: textQuestion has paragraph bool
       const para = (textQuestion as Record<string, unknown>).paragraph as boolean | undefined;

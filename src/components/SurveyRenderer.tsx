@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { ParsedForm } from "@/lib/forms";
 
 export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
@@ -44,7 +45,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
           <h2 className="text-xl font-bold">{done.presetLabel}</h2>
           <p className="mt-2 text-zinc-600">{done.presetBody}</p>
           <p className="mt-4 text-xs text-zinc-500">확인 메일이 발송되었습니다. (Resend 키 없을 시 스킵)</p>
-          <a href="/" className="inline-block mt-6 text-sm border rounded-full px-5 py-2">홈으로</a>{/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <Link href="/" className="inline-block mt-6 text-sm border rounded-full px-5 py-2">홈으로</Link>
         </div>
       </div>
     );

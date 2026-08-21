@@ -23,6 +23,10 @@
 # misc
 .DS_Store
 *.pem
+# google service account
+*service_account*.json
+velvety-maker-*.json
+*-a798b82e2e17.json
 
 # debug
 npm-debug.log*
