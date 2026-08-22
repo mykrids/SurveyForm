@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // .env 단계별 채우기 도우미 — 보관 값을 붙여넣으면 .env에 안전하게 기록
 // 사용: node scripts/setup-env.mjs
-import fs from 'fs', readline from 'readline';
+import fs from 'fs';
+import readline from 'readline';
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const q = (msg) => new Promise(r => rl.question(msg, r));
 
