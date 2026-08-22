@@ -49,7 +49,7 @@ await test('2단계 GAS WebApp', async () => {
   const url = env.GAS_WEBAPP_URL, secret = env.GAS_SHARED_SECRET;
   if (!url) throw new Error('GAS_WEBAPP_URL 빈 값 — Sheets 배포 후 .env에 넣으세요');
   if (!secret) throw new Error('GAS_SHARED_SECRET 빈 값');
-  const res = await fetch(url, { method:'POST', headers:{ Authorization:`Bearer ${secret}`, 'Content-Type':'application/json' }, body: JSON.stringify({ action:'read', _secret: secret }) });
+  const res = await fetch(`${url}?action=read&secret=${encodeURIComponent(secret)}`, { method:'GET', headers:{ Authorization:`Bearer ${secret}` } });
   const text = await res.text();
   if (res.status === 401) throw new Error(`401 SECRET 불일치 — Script Properties와 .env가 다름: ${text.slice(0,200)}`);
   if (res.status === 403) throw new Error(`403 웹앱 권한 — 배포 시 "모든 사용자"로 설정했는지 확인: ${text.slice(0,200)}`);

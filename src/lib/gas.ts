@@ -1,13 +1,15 @@
 export async function gasWrite(url: string, payload: Record<string, unknown>) {
   const secret = process.env.GAS_SHARED_SECRET;
   if (!url) throw new Error("GAS_WEBAPP_URL missing");
-  const res = await fetch(`${url}?action=write`, {
+  const urlWithSecret = secret ? `${url}?action=write&secret=${encodeURIComponent(secret)}` : `${url}?action=write`;
+  const body = secret ? { ...payload, _secret: secret } : payload;
+  const res = await fetch(urlWithSecret, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const t = await res.text();
@@ -19,7 +21,8 @@ export async function gasWrite(url: string, payload: Record<string, unknown>) {
 export async function gasRead(url: string) {
   const secret = process.env.GAS_SHARED_SECRET;
   if (!url) throw new Error("GAS_WEBAPP_URL missing");
-  const res = await fetch(`${url}?action=read`, {
+  const urlWithSecret = secret ? `${url}?action=read&secret=${encodeURIComponent(secret)}` : `${url}?action=read`;
+  const res = await fetch(urlWithSecret, {
     method: "GET",
     headers: secret ? { Authorization: `Bearer ${secret}` } : {},
   });
