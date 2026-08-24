@@ -3,6 +3,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,16 +13,35 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* dark mode 강제 비활성화 — 관리자 패널 등 흰 배경에서 글자가 밝아져 안보이는 문제 방지 */
+html {
+  color-scheme: light;
+}
+
+/* dark mode 완전 비활성화 — 시스템이 다크모드라도 라이트 고정 (관리자 패널 흰 배경에서 글자 안보임 방지) */
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #ffffff;
     --foreground: #171717;
+    color-scheme: light;
+  }
+  html {
+    color-scheme: light;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--background) !important;
+  color: var(--foreground) !important;
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* 폼 컨트롤이 브라우저 다크 스타일을 따라가지 않도록 강제 */
+input, select, textarea {
+  color-scheme: light;
+  background-color: #ffffff !important;
+  color: #171717 !important;
+}
+input::placeholder, textarea::placeholder {
+  color: #a1a1aa !important; /* zinc-400 */
+  opacity: 1;
 }
