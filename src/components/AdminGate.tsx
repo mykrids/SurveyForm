@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import AdminPanel from "./AdminPanel";
+import AdminUserManager from "./AdminUserManager";
 
 type Role = "administrator" | "supervisor";
 
@@ -89,6 +90,11 @@ export default function AdminGate() {
         </span>
         <button onClick={logout} className="border dark:border-zinc-700 rounded-full px-3 py-1 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800">로그아웃</button>
       </div>
+      {role === "administrator" && (
+        <div className="mx-auto max-w-5xl px-6">
+          <AdminUserManager />
+        </div>
+      )}
       <AdminPanel role={role} />
     </div>
   );

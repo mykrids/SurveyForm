@@ -23,6 +23,18 @@ export function verifyCredentials(id: string, pw: string): AdminRole | null {
   return null;
 }
 
+export async function verifyCredentialsAsync(id: string, pw: string): Promise<AdminRole | null> {
+  // 1) env 기반 즉시 검증
+  const sync = verifyCredentials(id, pw);
+  if (sync) return sync;
+  // 2) 동적 Supervisor 저장소 검증 (Supabase/파일/메모리)
+  try {
+    const { verifySupervisor } = await import("./adminUsers");
+    if (await verifySupervisor(id, pw)) return "supervisor";
+  } catch {}
+  return null;
+}
+
 function getSecret(): string {
   return process.env.AUTH_SECRET || process.env.CRON_SECRET || process.env.GAS_SHARED_SECRET || "krids-auth-secret-change-me";
 }

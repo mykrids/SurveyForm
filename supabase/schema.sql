@@ -23,3 +23,11 @@ create table if not exists survey_responses_log (
   unique(survey_id, respondent_identifier)
 );
 create index if not exists idx_responses_survey on survey_responses_log(survey_id);
+
+-- 관리자 계정 (Administrator가 Supervisor를 관리)
+create table if not exists admin_users (
+  id text primary key,
+  password text not null,
+  role text not null check (role in ('supervisor')),
+  created_at timestamptz not null default now()
+);
