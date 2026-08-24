@@ -17,12 +17,34 @@ type Survey = {
   form_id: string | null;
 };
 
+// 현재 시스템에 설정된 실제 값 ( .env 기준 ) — 테스트용 자동 입력 (비밀값은 마스킹)
+const CURRENT_VALUES = {
+  github: "mykrids / SurveyForm (krids.org@gmail.com)",
+  supabaseUrl: "https://bpvvxsrtfigphxzoztjm.supabase.co",
+  supabaseAnon: "sb_publishable_*** (대시보드 > API에서 확인)",
+  serviceAccount: "survey-form@velvety-maker-506214-u5.iam.gserviceaccount.com",
+  serviceProject: "velvety-maker-506214-u5",
+  gasUrl: "https://script.google.com/macros/s/AKfycbz…/exec",
+  gasSecret: "2afea94… (Apps Script > Script Properties)",
+  resendFrom: "noreply@krids.org",
+  resendKey: "re_*** (Resend 대시보드 > API Keys)",
+  vercelCron: "344b6d… (env CRON_SECRET)",
+  adminEmail: "krids.org@gmail.com",
+};
+
 export default function AdminPanel() {
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Partial<Survey>>({
-    title: "", form_id: "", start_at: "", end_at: "", report_delay_hours: 1,
-    duplicate_check_type: "none", end_message_preset: "1", gas_webapp_url: "", admin_email: ""
+    title: "",
+    form_id: "",
+    start_at: "",
+    end_at: "",
+    report_delay_hours: 1,
+    duplicate_check_type: "none",
+    end_message_preset: "1",
+    gas_webapp_url: CURRENT_VALUES.gasUrl,
+    admin_email: CURRENT_VALUES.adminEmail,
   });
   const [msg, setMsg] = useState("");
 
@@ -43,45 +65,128 @@ export default function AdminPanel() {
     const r = await fetch("/api/admin/surveys", { method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(form) });
     const j = await r.json();
     if (!r.ok) setMsg(`오류: ${j.error || r.status}`);
-    else { setMsg("저장 완료"); setForm({ title:"", form_id:"", start_at:"", end_at:"", report_delay_hours:1, duplicate_check_type:"none", end_message_preset:"1", gas_webapp_url:"", admin_email:"" }); load(); }
+    else {
+      setMsg("저장 완료 — 응답 페이지 링크가 아래 목록에 생성되었습니다.");
+      setForm({ title:"", form_id:"", start_at:"", end_at:"", report_delay_hours:1, duplicate_check_type:"none", end_message_preset:"1", gas_webapp_url: CURRENT_VALUES.gasUrl, admin_email: CURRENT_VALUES.adminEmail });
+      load();
+    }
   }
 
   const warning = getDuplicateWarning(form.duplicate_check_type || "none");
+  const selectedPreset = END_MESSAGE_PRESETS[form.end_message_preset as keyof typeof END_MESSAGE_PRESETS] || END_MESSAGE_PRESETS["1"];
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8 bg-background text-foreground">
       <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">관리자 설정 패널</h1>
-      <p className="text-sm text-zinc-700 dark:text-zinc-300">설문 기간·중복방지·종료메시지·GAS URL을 설정합니다. 저장은 Supabase(surveys) + service_role 경유.</p>
+      <p className="text-sm text-zinc-700 dark:text-zinc-300 mt-1">설문 기간·중복방지·종료메시지·GAS URL을 설정합니다. 저장은 Supabase(surveys) + service_role 경유.</p>
 
-      <form onSubmit={submit} className="mt-6 grid gap-4 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
+      {/* 현재 시스템 설정 - 자동 입력됨 */}
+      <div className="mt-6 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-zinc-50 dark:bg-zinc-900">
+        <h2 className="font-semibold text-zinc-900 dark:text-white flex items-center gap-2">⚙️ 현재 시스템 설정 <span className="text-xs font-normal bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">자동 입력됨 · 테스트 가능</span></h2>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">아래 값들은 현재 서버(.env)가 실제로 사용 중인 값입니다. 응답 수가 늘어나면 각 사이트에서 요금제를 신청하면 되고, 코드는 변경 없이 env만 교체하면 됩니다.</p>
+        <div className="mt-4 grid md:grid-cols-2 gap-3 text-xs leading-relaxed">
+          <div className="border dark:border-zinc-800 rounded-xl p-3 bg-white dark:bg-zinc-950">
+            <p className="font-semibold text-zinc-900 dark:text-white">Supabase <span className="text-zinc-500 font-normal">(항상 동일)</span></p>
+            <p className="text-zinc-600 dark:text-zinc-400 break-all">URL: {CURRENT_VALUES.supabaseUrl}</p>
+            <p className="text-zinc-600 dark:text-zinc-400">Anon: {CURRENT_VALUES.supabaseAnon}</p>
+            <p className="text-zinc-500 dark:text-zinc-500 mt-1">→ 응답 5만건 이상 시 Supabase Pro 요금제 신청 (대시보드 &gt; Billing)</p>
+          </div>
+          <div className="border dark:border-zinc-800 rounded-xl p-3 bg-white dark:bg-zinc-950">
+            <p className="font-semibold text-zinc-900 dark:text-white">Google 서비스 계정 <span className="text-zinc-500 font-normal">(항상 동일)</span></p>
+            <p className="text-zinc-600 dark:text-zinc-400 break-all">{CURRENT_VALUES.serviceAccount}</p>
+            <p className="text-zinc-600 dark:text-zinc-400">프로젝트: {CURRENT_VALUES.serviceProject}</p>
+            <p className="text-zinc-500 dark:text-zinc-500 mt-1">→ 모든 구글폼에 이 이메일을 ‘뷰어’로 공유해야 함</p>
+          </div>
+          <div className="border dark:border-zinc-800 rounded-xl p-3 bg-white dark:bg-zinc-950">
+            <p className="font-semibold text-zinc-900 dark:text-white">GAS Web App <span className="text-amber-600 dark:text-amber-400 font-normal">(시트 생성 시 갱신)</span></p>
+            <p className="text-zinc-600 dark:text-zinc-400 break-all">{CURRENT_VALUES.gasUrl.slice(0, 55)}…</p>
+            <p className="text-zinc-600 dark:text-zinc-400">Secret: {CURRENT_VALUES.gasSecret.slice(0, 8)}…</p>
+            <p className="text-zinc-500 dark:text-zinc-500 mt-1">→ 시트마다 Apps Script를 새로 배포하면 URL이 바뀜 — 갱신 필요</p>
+          </div>
+          <div className="border dark:border-zinc-800 rounded-xl p-3 bg-white dark:bg-zinc-950">
+            <p className="font-semibold text-zinc-900 dark:text-white">Resend / Vercel / GitHub <span className="text-zinc-500 font-normal">(항상 동일)</span></p>
+            <p className="text-zinc-600 dark:text-zinc-400">From: {CURRENT_VALUES.resendFrom} / Key: {CURRENT_VALUES.resendKey.slice(0,12)}…</p>
+            <p className="text-zinc-600 dark:text-zinc-400">Cron: {CURRENT_VALUES.vercelCron} / GitHub: {CURRENT_VALUES.github}</p>
+            <p className="text-zinc-500 dark:text-zinc-500 mt-1">→ 월 메일 3천통 초과 시 Resend Pro, Vercel은 사용량 기반</p>
+          </div>
+        </div>
+      </div>
+
+      <form onSubmit={submit} className="mt-6 grid gap-5 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
         <div className="grid md:grid-cols-2 gap-4">
-          <label className="text-sm font-medium text-zinc-900">설문 제목<input value={form.title||""} onChange={e=>setForm({...form,title:e.target.value})} required className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="예: 고객 만족도 조사" /></label>
-          <label className="text-sm font-medium text-zinc-900">Google Form ID<input value={form.form_id||""} onChange={e=>setForm({...form,form_id:e.target.value})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="1a2b3c… (URL에서 추출)" /></label>
+          <label className="text-sm font-medium text-zinc-900 dark:text-white">
+            설문 제목
+            <input value={form.title||""} onChange={e=>setForm({...form,title:e.target.value})} required className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 dark:focus:ring-white/10 focus:border-zinc-900" placeholder="예: 2026 강의 평가 (시트 생성 시 갱신)" />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">시트 생성 시 갱신 — 매번 새 설문 제목으로 교체</span>
+          </label>
+          <label className="text-sm font-medium text-zinc-900 dark:text-white">
+            Google Form ID <span className="ml-1 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">시트 생성 시 갱신</span>
+            <input value={form.form_id||""} onChange={e=>setForm({...form,form_id:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="예: 1FAIpQLSdXx… (URL에서 복사, 시트마다 다름)" />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">예시: https://docs.google.com/forms/d/<b>1FAIpQLSd…</b>/edit → 굵은 부분이 ID</span>
+          </label>
         </div>
         <div className="grid md:grid-cols-2 gap-4">
-          <label className="text-sm font-medium text-zinc-900">시작 일시<input type="datetime-local" value={form.start_at||""} onChange={e=>setForm({...form,start_at:e.target.value})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" /></label>
-          <label className="text-sm font-medium text-zinc-900">종료 일시<input type="datetime-local" value={form.end_at||""} onChange={e=>setForm({...form,end_at:e.target.value})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" /></label>
+          <label className="text-sm font-medium text-zinc-900 dark:text-white">
+            시작 일시 <span className="text-xs text-zinc-500 font-normal">시트 생성 시 갱신</span>
+            <input type="datetime-local" value={form.start_at||""} onChange={e=>setForm({...form,start_at:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">비우면 즉시 시작</span>
+          </label>
+          <label className="text-sm font-medium text-zinc-900 dark:text-white">
+            종료 일시 <span className="text-xs text-zinc-500 font-normal">시트 생성 시 갱신</span>
+            <input type="datetime-local" value={form.end_at||""} onChange={e=>setForm({...form,end_at:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">예시: 2026-08-31 23:59 — 종료 후 1시간 뒤 PDF 자동 발송</span>
+          </label>
         </div>
         <div className="grid md:grid-cols-3 gap-4">
-          <label className="text-sm font-medium text-zinc-900">지연 리포트 시간 (시간)
-            <input type="number" min={1} max={24} value={form.report_delay_hours||1} onChange={e=>setForm({...form,report_delay_hours: Number(e.target.value)})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" />
+          <label className="text-sm font-medium text-zinc-900 dark:text-white">
+            지연 리포트 시간 (시간)
+            <input type="number" min={1} max={24} value={form.report_delay_hours||1} onChange={e=>setForm({...form,report_delay_hours: Number(e.target.value)})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">기본 1시간 — 종료 후 그래프/PDF 발송 지연</span>
           </label>
-          <label className="text-sm font-medium text-zinc-900">중복 방지
-            <select value={form.duplicate_check_type} onChange={e=>setForm({...form,duplicate_check_type:e.target.value})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900">
+          <label className="text-sm font-medium text-zinc-900 dark:text-white">
+            중복 방지
+            <select value={form.duplicate_check_type} onChange={e=>setForm({...form,duplicate_check_type:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900">
               {Object.entries(DUPLICATE_CHECK_TYPES).map(([k,v])=><option key={k} value={k}>{v}</option>)}
             </select>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">아래 ‘중복 방지 상세’ 참고 — 응답자는 별도 조치 없음</span>
           </label>
-          <label className="text-sm font-medium text-zinc-900">종료 메시지 프리셋 (10종)
-            <select value={form.end_message_preset} onChange={e=>setForm({...form,end_message_preset:e.target.value})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900">
+          <label className="text-sm font-medium text-zinc-900 dark:text-white">
+            종료 메시지 프리셋 (10종) <span className="text-xs text-zinc-500 font-normal">1~10번</span>
+            <select value={form.end_message_preset} onChange={e=>setForm({...form,end_message_preset:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900">
               {Object.entries(END_MESSAGE_PRESETS).map(([k,v])=><option key={k} value={k}>{k}. {v.label}</option>)}
             </select>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">선택한 번호의 문구가 응답 완료 화면에 표시</span>
           </label>
         </div>
-        {warning && <p className="text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-amber-800">⚠️ {warning}</p>}
-        <label className="text-sm font-medium text-zinc-900">GAS Web App URL<input value={form.gas_webapp_url||""} onChange={e=>setForm({...form,gas_webapp_url:e.target.value})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="https://script.google.com/macros/s/…/exec" /></label>
-        <label className="text-sm font-medium text-zinc-900">관리자 이메일 (PDF 수신)<input type="email" value={form.admin_email||""} onChange={e=>setForm({...form,admin_email:e.target.value})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="admin@example.com" /></label>
-        <button type="submit" className="rounded-full bg-black text-white px-6 py-2 text-sm font-medium self-start hover:bg-zinc-800 transition">설문 저장</button>
-        {msg && <p className="text-sm text-zinc-700 font-medium">{msg}</p>}
+        {/* 프리셋 미리보기 */}
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 p-3">
+          <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">선택된 종료 메시지 미리보기 — {form.end_message_preset}번</p>
+          <p className="text-sm font-medium text-zinc-900 dark:text-white mt-1">{selectedPreset.label}</p>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">{selectedPreset.body}</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-500 mt-1">※ 전체 1~10번 목록은 아래 ‘종료 메시지 1~10번 상세’에서 확인</p>
+        </div>
+        {warning && <p className="text-xs bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-amber-800 dark:text-amber-200">⚠️ {warning}</p>}
+        {/* 중복 방지 응답자 안내 */}
+        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-3 text-xs leading-relaxed">
+          <p className="font-semibold text-blue-900 dark:text-blue-200">응답자 안내 — 중복 방지별 “해야 할 일”</p>
+          <ul className="mt-1 list-disc list-inside text-blue-800 dark:text-blue-300 space-y-1">
+            <li><b>제한 없음:</b> 응답자는 그냥 설문 응답하면 됩니다. 여러 번 제출 가능.</li>
+            <li><b>쿠키/LocalStorage:</b> 응답자는 그냥 응답하면 됩니다. 같은 브라우저에서 재응답 시 “이미 제출됨”으로 차단 — 브라우저 변경/쿠키 삭제 시 우회 가능.</li>
+            <li><b>이메일 기반:</b> 응답자는 이메일 칸에 본인 메일을 입력하고 응답하면 됩니다. 같은 이메일로 재제출 시 차단 (대소문자·공백·+태그 정규화).</li>
+          </ul>
+        </div>
+        <label className="text-sm font-medium text-zinc-900 dark:text-white">
+          GAS Web App URL <span className="ml-1 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">시트 생성 시 갱신</span>
+          <input value={form.gas_webapp_url||""} onChange={e=>setForm({...form,gas_webapp_url:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="https://script.google.com/macros/s/…/exec (시트마다 새로 배포 시 URL 변경)" />
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">예시: 현재 값 자동 입력됨 — 새 시트 생성 시 Apps Script 새로 배포 후 URL 교체</span>
+        </label>
+        <label className="text-sm font-medium text-zinc-900 dark:text-white">
+          관리자 이메일 (PDF 수신) <span className="text-xs text-zinc-500 font-normal">항상 동일: krids.org@gmail.com</span>
+          <input type="email" value={form.admin_email||""} onChange={e=>setForm({...form,admin_email:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="krids.org@gmail.com (자동 입력됨)" />
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">보고서 PDF가 이 메일로 자동 발송됩니다 — 변경 없으면 그대로 두세요</span>
+        </label>
+        <button type="submit" className="rounded-full bg-black dark:bg-white dark:text-black text-white px-6 py-2 text-sm font-medium self-start hover:bg-zinc-800 dark:hover:bg-zinc-200 transition">설문 저장</button>
+        {msg && <p className="text-sm text-zinc-700 dark:text-zinc-300 font-medium">{msg}</p>}
       </form>
 
       <div className="mt-8">
@@ -104,15 +209,70 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      <div className="mt-10 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 bg-zinc-50 dark:bg-zinc-900">
-        <h3 className="font-semibold text-zinc-900 dark:text-white">도움말 · 관리자 이용 안내</h3>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">이전 하단 ‘N’ 버튼의 영문 안내를 한글로 교체한 내용입니다.</p>
-        <ul className="mt-4 space-y-2 text-sm text-zinc-700 dark:text-zinc-300 list-disc list-inside leading-relaxed">
-          <li><span className="font-medium">설문 생성:</span> 설문 제목과 Google Form ID를 입력하고 기간을 설정한 뒤 ‘설문 저장’을 누르세요.</li>
-          <li><span className="font-medium">테마 변경:</span> 화면 좌측 하단의 ‘다크 모드 / 라이트 모드’ 버튼을 누르면 기능 창이 아닌 <span className="font-semibold">페이지 전체</span>의 색상이 전환됩니다.</li>
-          <li><span className="font-medium">중복 방지:</span> 없음 / 쿠키 / 이메일 중 선택 — 이메일 선택 시 응답 목록에서 자동 검증됩니다.</li>
-          <li><span className="font-medium">문의:</span> krids.org@gmail.com 로 워드 파일과 기간을 보내면 종료 후 그래프·시트가 자동 발송됩니다.</li>
-        </ul>
+      {/* 도움말 섹션 */}
+      <div className="mt-10 space-y-4">
+        <details className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-zinc-900 open:bg-zinc-50 dark:open:bg-zinc-800" open>
+          <summary className="font-semibold text-zinc-900 dark:text-white cursor-pointer">1️⃣ 설문 생성 — 구글폼을 먼저 만들어야 하나요? (네, 그렇습니다)</summary>
+          <ol className="mt-4 list-decimal list-inside space-y-2 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+            <li><b>구글폼에서 설문지 먼저 생성:</b> drive.google.com → 새로 만들기 → Google Forms → 제목/문항 작성 (단답형·장문형·객관식·체크박스 모두 지원).</li>
+            <li><b>서비스 계정에 뷰어 공유:</b> 폼 편집 화면 우측 상단 ‘공유’ → <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">survey-form@velvety-maker-506214-u5.iam.gserviceaccount.com</code> 에 뷰어 권한 추가 (안 하면 API가 폼을 읽지 못함).</li>
+            <li><b>Form ID 복사:</b> 폼 URL이 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">https://docs.google.com/forms/d/1FAIpQLSd…/edit</code> 일 때 <b>1FAIpQLSd…</b> 부분이 ID — 관리자 패널의 ‘Google Form ID’ 칸에 붙여넣기 (시트 생성 시 갱신).</li>
+            <li><b>시트 연결:</b> 폼 → 응답 탭 → 스프레드시트 연결(새 시트 생성) → 해당 시트에서 확장 프로그램 → Apps Script → <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">gas/Code.gs</code> 붙여넣기 → Script Properties에 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">SHARED_SECRET=2afea94…</code> 등록 → 웹앱으로 배포(액세스: Anyone) → URL을 ‘GAS Web App URL’ 칸에 붙여넣기 (시트 생성 시 갱신).</li>
+            <li><b>관리자 패널에서 저장:</b> 설문 제목·기간·GAS URL·관리자 이메일 입력 후 ‘설문 저장’ — 아래 목록에 링크가 생기면 완료.</li>
+          </ol>
+        </details>
+
+        <details className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-zinc-900">
+          <summary className="font-semibold text-zinc-900 dark:text-white cursor-pointer">2️⃣ 설문 템플릿 만드는 방법</summary>
+          <div className="mt-4 space-y-2 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
+            <p>랜딩 페이지의 6개 카드(고객 만족도 조사, 강의 평가 등)는 <b>예시</b>입니다. 실제 템플릿은 코드가 아니라 <b>구글폼을 복제</b>해서 만듭니다.</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>구글폼에서 기존 폼을 ‘사본 만들기’로 복제 → 문항만 수정 (예: ‘강의 평가’용 질문으로 교체) → 새 Form ID로 관리자 패널에 등록.</li>
+              <li>자주 쓰는 폼은 구글 드라이브에서 ‘템플릿 갤러리’에 보관하거나, 폼 URL을 북마크해 복제용 원본으로 유지.</li>
+              <li>랜딩의 템플릿 카드가 실제 폼과 연결되게 하려면: 카드 링크를 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">/s/저장된설문ID</code> 로 연결 (현재는 데모 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">/s/demo</code> 로 고정 — 필요 시 개발자에게 카드-설문 매핑 요청).</li>
+            </ul>
+          </div>
+        </details>
+
+        <details className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-zinc-900">
+          <summary className="font-semibold text-zinc-900 dark:text-white cursor-pointer">3️⃣ 설문 기간 아래 1~10번은? — 종료 메시지 프리셋 전체 보기</summary>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">응답자가 ‘제출하기’를 누르면 완료 화면에 표시되는 문구입니다. 번호를 선택하면 미리보기가 위에 나타납니다.</p>
+          <div className="mt-4 grid gap-2">
+            {Object.entries(END_MESSAGE_PRESETS).map(([k,v])=>(
+              <div key={k} className={`border rounded-xl p-3 text-sm ${form.end_message_preset===k ? "border-zinc-900 dark:border-white bg-zinc-900 text-white dark:bg-white dark:text-black" : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800"}`}>
+                <p className="font-semibold">{k}. {v.label} {form.end_message_preset===k && "← 선택됨"}</p>
+                <p className={`text-xs mt-1 ${form.end_message_preset===k ? "text-zinc-200 dark:text-zinc-600" : "text-zinc-600 dark:text-zinc-400"}`}>{v.body}</p>
+              </div>
+            ))}
+          </div>
+        </details>
+
+        <details className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-zinc-900" open>
+          <summary className="font-semibold text-zinc-900 dark:text-white cursor-pointer">4️⃣ 중복 방지 — 쿠키/이메일은 어떻게 방지되고 응답자는 무엇을 해야 하나?</summary>
+          <div className="mt-4 space-y-3 text-sm leading-relaxed">
+            {[
+              { k: "none", title: "제한 없음", how: "검사를 하지 않습니다. 같은 사람이 여러 번 제출해도 모두 저장됩니다.", todo: "응답자는 그냥 설문 응답하면 됩니다. 추가 조치 없음." },
+              { k: "cookie", title: "쿠키 / LocalStorage 기반", how: "제출 시 브라우저에 survey_*_submitted 쿠키와 localStorage를 1년 동안 저장합니다. 동일 브라우저에서 재접속 시 서버와 클라이언트 모두에서 차단합니다. 단, 다른 브라우저·시크릿모드·쿠키 삭제로 우회될 수 있습니다.", todo: "응답자는 그냥 설문 응답하면 됩니다. 두 번째 접속 시 ‘이미 제출됨’ 메시지가 뜨면 정상 차단입니다." },
+              { k: "email", title: "이메일 기반 (권장)", how: "응답 시 입력한 이메일을 소문자·공백 제거·+태그 제거로 정규화한 뒤, 해당 설문에서 이미 저장된 이메일 목록과 비교합니다. 일치하면 409 오류로 차단합니다.", todo: "응답자는 이메일 칸에 본인 메일을 정확히 입력하고 응답하면 됩니다. 같은 이메일로 재응답 시 ‘이미 응답한 이메일입니다’ 메시지가 뜹니다." },
+              { k: "email_verified", title: "이메일 인증 기반 (추후 확장)", how: "현재는 선택만 가능하고 실제 인증 메일 발송은 미구현입니다. 선택 시 일반 이메일 방식과 동일하게 동작합니다.", todo: "추후 인증 링크를 누르는 방식이 추가될 예정 — 현재는 그냥 이메일 입력 후 응답하면 됩니다." },
+            ].map(item=>(
+              <div key={item.k} className={`border rounded-xl p-3 ${form.duplicate_check_type===item.k ? "border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-950" : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800"}`}>
+                <p className="font-semibold text-zinc-900 dark:text-white">{DUPLICATE_CHECK_TYPES[item.k as keyof typeof DUPLICATE_CHECK_TYPES]} {form.duplicate_check_type===item.k && "← 현재 선택"}</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">방식: {item.how}</p>
+                <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mt-1">응답자 할 일: {item.todo}</p>
+              </div>
+            ))}
+          </div>
+        </details>
+
+        <div className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-zinc-50 dark:bg-zinc-900">
+          <h3 className="font-semibold text-zinc-900 dark:text-white">💡 빠른 체크리스트</h3>
+          <ul className="mt-3 space-y-1 text-sm text-zinc-700 dark:text-zinc-300 list-disc list-inside">
+            <li>새 시트 만들 때마다 갱신: <b>설문 제목, Google Form ID, 시작/종료 일시, GAS Web App URL</b></li>
+            <li>항상 동일 (변경 불필요): <b>관리자 이메일(krids.org@gmail.com), Supabase, Resend, 서비스계정, GitHub, Vercel Cron</b></li>
+            <li>요금제: 응답 수가 늘면 Supabase(대시보드 &gt; Billing), Resend(발송량), Vercel(사용량)에서 각각 Pro 신청 — 코드 수정 불필요</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
