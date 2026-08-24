@@ -12,10 +12,11 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* dark mode 강제 비활성화 — 관리자 패널 등 흰 배경에서 글자가 밝아져 안보이는 문제 방지 */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #ffffff;
+    --foreground: #171717;
   }
 }
 
