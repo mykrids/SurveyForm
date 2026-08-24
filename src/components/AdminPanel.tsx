@@ -178,7 +178,6 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">선택된 종료 메시지 미리보기 — {form.end_message_preset}번</p>
           <p className="text-sm font-medium text-zinc-900 dark:text-white mt-1">{selectedPreset.label}</p>
           <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">{selectedPreset.body}</p>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-500 mt-1">※ 전체 1~10번 목록은 아래 ‘종료 메시지 1~10번 상세’에서 확인</p>
         </div>
         {warning && <p className="text-xs bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-amber-800 dark:text-amber-200">⚠️ {warning}</p>}
         {/* 중복 방지 응답자 안내 */}
@@ -256,21 +255,8 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           </div>
         </details>
 
-        <details className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-zinc-900">
-          <summary className="font-semibold text-zinc-900 dark:text-white cursor-pointer">3️⃣ 설문 기간 아래 1~10번은? — 종료 메시지 프리셋 전체 보기</summary>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">응답자가 ‘제출하기’를 누르면 완료 화면에 표시되는 문구입니다. 번호를 선택하면 미리보기가 위에 나타납니다.</p>
-          <div className="mt-4 grid gap-2">
-            {Object.entries(END_MESSAGE_PRESETS).map(([k,v])=>(
-              <div key={k} className={`border rounded-xl p-3 text-sm ${form.end_message_preset===k ? "border-zinc-900 dark:border-white bg-zinc-900 text-white dark:bg-white dark:text-black" : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800"}`}>
-                <p className="font-semibold">{k}. {v.label} {form.end_message_preset===k && "← 선택됨"}</p>
-                <p className={`text-xs mt-1 ${form.end_message_preset===k ? "text-zinc-200 dark:text-zinc-600" : "text-zinc-600 dark:text-zinc-400"}`}>{v.body}</p>
-              </div>
-            ))}
-          </div>
-        </details>
-
         <details className="border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-zinc-900" open>
-          <summary className="font-semibold text-zinc-900 dark:text-white cursor-pointer">4️⃣ 중복 방지 — 쿠키/이메일은 어떻게 방지되고 응답자는 무엇을 해야 하나?</summary>
+          <summary className="font-semibold text-zinc-900 dark:text-white cursor-pointer">3️⃣ 중복 방지 — 쿠키/이메일은 어떻게 방지되고 응답자는 무엇을 해야 하나?</summary>
           <div className="mt-4 space-y-3 text-sm leading-relaxed">
             {[
               { k: "none", title: "제한 없음", how: "검사를 하지 않습니다. 같은 사람이 여러 번 제출해도 모두 저장됩니다.", todo: "응답자는 그냥 설문 응답하면 됩니다. 추가 조치 없음." },
