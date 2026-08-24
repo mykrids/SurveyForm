@@ -51,7 +51,7 @@ export const LANDING_DATA = {
   ],
   pricing: [
     { name: "Starter", price: "₩0", period: "/월", features: ["설문 3개", "월 응답 100건", "기본 커스텀 UI", "이메일 확인 발송"], cta: "무료 시작", popular: false },
-    { name: "Pro", price: "₩29,000", period: "/월", features: ["설문 무제한", "월 응답 5,000건", "쿠키/이메일 중복방지", "PDF 자동 리포트", "우선 지원"], cta: "Pro 시작", popular: true },
-    { name: "Enterprise", price: "문의", period: "", features: ["SSO / 팀 관리", "이메일 인증 중복방지", "전용 GAS/시트 분리", "SLA 보장"], cta: "영업 문의", popular: false },
+    { name: "Pro", price: "₩29,000", period: "/월", features: ["고객 요청 맞춤 설문", "월 응답 5,000건", "쿠키/이메일 중복방지", "PDF 자동 리포트", "우선 지원"], cta: "Pro 시작", popular: true },
+    { name: "Enterprise", price: "문의", period: "", features: ["원하는 서비스 협의", "이메일 인증 중복방지", "전용 GAS/시트 분리", "보고서 형식 고객 맞춤"], cta: "pro 확장 문의", popular: false },
   ],
 };
