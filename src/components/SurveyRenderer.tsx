@@ -39,31 +39,31 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   }
 
   if (done) {
-    return (
-      <div className="mx-auto max-w-xl px-6 py-16 text-center">
-        <div className="border rounded-2xl p-8 bg-white">
-          <h2 className="text-xl font-bold">{done.presetLabel}</h2>
-          <p className="mt-2 text-zinc-600">{done.presetBody}</p>
-          <p className="mt-4 text-xs text-zinc-500">확인 메일이 발송되었습니다. (Resend 키 없을 시 스킵)</p>
-          <Link href="/" className="inline-block mt-6 text-sm border rounded-full px-5 py-2">홈으로</Link>
-        </div>
-      </div>
-    );
-  }
+     return (
+       <div className="mx-auto max-w-xl px-6 py-16 text-center">
+         <div className="border dark:border-zinc-800 rounded-2xl p-8 bg-white dark:bg-zinc-900">
+           <h2 className="text-xl font-bold dark:text-white">{done.presetLabel}</h2>
+           <p className="mt-2 text-zinc-600 dark:text-zinc-300">{done.presetBody}</p>
+           <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">확인 메일이 발송되었습니다. (Resend 키 없을 시 스킵)</p>
+           <Link href="/" className="inline-block mt-6 text-sm border dark:border-zinc-700 rounded-full px-5 py-2 dark:text-white">홈으로</Link>
+         </div>
+       </div>
+     );
+   }
 
-  if (!form) return <div className="mx-auto max-w-xl px-6 py-16 text-center text-zinc-500">설문 로딩 중…</div>;
+   if (!form) return <div className="mx-auto max-w-xl px-6 py-16 text-center text-zinc-500 dark:text-zinc-400">설문 로딩 중…</div>;
 
-  return (
-    <div className="mx-auto max-w-xl px-6 py-8">
-      <h1 className="text-2xl font-bold">{form.title}</h1>
-      {form.description && <p className="text-sm text-zinc-600 mt-1">{form.description}</p>}
-      {form.unsupported.length>0 && (
-        <div className="mt-4 bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800">
-          ⚠️ 이 설문에는 지원되지 않는 문항 유형이 포함되어 있습니다: {form.unsupported.map(u=>`${u.title}(${u.rawType})`).join(", ")}
-        </div>
-      )}
-      {status && <p className="mt-3 text-sm text-amber-700">{status}</p>}
-      <form onSubmit={submit} className="mt-6 space-y-5 border rounded-2xl p-6 bg-white">
+   return (
+     <div className="mx-auto max-w-xl px-6 py-8">
+       <h1 className="text-2xl font-bold dark:text-white">{form.title}</h1>
+       {form.description && <p className="text-sm text-zinc-600 dark:text-zinc-300 mt-1">{form.description}</p>}
+       {form.unsupported.length>0 && (
+         <div className="mt-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-sm text-amber-800 dark:text-amber-200">
+           ⚠️ 이 설문에는 지원되지 않는 문항 유형이 포함되어 있습니다: {form.unsupported.map(u=>`${u.title}(${u.rawType})`).join(", ")}
+         </div>
+       )}
+       {status && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{status}</p>}
+       <form onSubmit={submit} className="mt-6 space-y-5 border dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
         <label className="block text-sm">이메일 (중복 체크·확인 메일용)
           <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="mt-1 w-full border rounded-lg px-3 py-2" placeholder="you@example.com" />
         </label>

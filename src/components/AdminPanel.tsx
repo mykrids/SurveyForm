@@ -49,11 +49,11 @@ export default function AdminPanel() {
   const warning = getDuplicateWarning(form.duplicate_check_type || "none");
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-8 bg-white text-zinc-900">
-      <h1 className="text-2xl font-bold text-zinc-900">관리자 설정 패널</h1>
-      <p className="text-sm text-zinc-700">설문 기간·중복방지·종료메시지·GAS URL을 설정합니다. 저장은 Supabase(surveys) + service_role 경유.</p>
+    <div className="mx-auto max-w-5xl px-6 py-8 bg-background text-foreground">
+      <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">관리자 설정 패널</h1>
+      <p className="text-sm text-zinc-700 dark:text-zinc-300">설문 기간·중복방지·종료메시지·GAS URL을 설정합니다. 저장은 Supabase(surveys) + service_role 경유.</p>
 
-      <form onSubmit={submit} className="mt-6 grid gap-4 border border-zinc-200 rounded-2xl p-6 bg-white">
+      <form onSubmit={submit} className="mt-6 grid gap-4 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
         <div className="grid md:grid-cols-2 gap-4">
           <label className="text-sm font-medium text-zinc-900">설문 제목<input value={form.title||""} onChange={e=>setForm({...form,title:e.target.value})} required className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="예: 고객 만족도 조사" /></label>
           <label className="text-sm font-medium text-zinc-900">Google Form ID<input value={form.form_id||""} onChange={e=>setForm({...form,form_id:e.target.value})} className="mt-1 w-full border border-zinc-300 rounded-lg px-3 py-2 bg-white text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="1a2b3c… (URL에서 추출)" /></label>
@@ -85,23 +85,34 @@ export default function AdminPanel() {
       </form>
 
       <div className="mt-8">
-        <h2 className="font-semibold text-zinc-900">등록된 설문 {loading ? "(로딩…)" : `(${surveys.length}개)`}</h2>
+        <h2 className="font-semibold text-zinc-900 dark:text-white">등록된 설문 {loading ? "(로딩…)" : `(${surveys.length}개)`}</h2>
         <div className="mt-3 grid gap-3">
           {surveys.map(s=>(
-            <div key={s.id} className="border border-zinc-200 rounded-xl p-4 flex flex-wrap justify-between gap-3 bg-white">
+            <div key={s.id} className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 flex flex-wrap justify-between gap-3 bg-white dark:bg-zinc-900">
               <div>
-                <p className="font-medium text-zinc-900">{s.title} <span className="text-xs text-zinc-500">/{s.id.slice(0,8)}</span></p>
-                <p className="text-xs text-zinc-700">기간: {s.start_at||"—"} ~ {s.end_at||"—"} · 중복:{s.duplicate_check_type} · 지연:{s.report_delay_hours}h · 리포트:{s.report_sent?"발송됨":"대기"} · preset:{s.end_message_preset}</p>
-                <p className="text-xs text-zinc-600">Form: {s.form_id||"—"} · GAS: {s.gas_webapp_url ? s.gas_webapp_url.slice(0,40)+"…" : "—"}</p>
+                <p className="font-medium text-zinc-900 dark:text-white">{s.title} <span className="text-xs text-zinc-500 dark:text-zinc-400">/{s.id.slice(0,8)}</span></p>
+                <p className="text-xs text-zinc-700 dark:text-zinc-300">기간: {s.start_at||"—"} ~ {s.end_at||"—"} · 중복:{s.duplicate_check_type} · 지연:{s.report_delay_hours}h · 리포트:{s.report_sent?"발송됨":"대기"} · preset:{s.end_message_preset}</p>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400">Form: {s.form_id||"—"} · GAS: {s.gas_webapp_url ? s.gas_webapp_url.slice(0,40)+"…" : "—"}</p>
               </div>
               <div className="flex gap-2 self-start">
-                <a href={`/s/${s.id}`} className="text-xs border border-zinc-300 rounded-full px-3 py-1 text-zinc-800 hover:bg-zinc-50">응답 페이지</a>
-                <a href={`/api/forms/${s.form_id || s.id}`} target="_blank" className="text-xs border border-zinc-300 rounded-full px-3 py-1 text-zinc-800 hover:bg-zinc-50">Form JSON</a>
+                <a href={`/s/${s.id}`} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800">응답 페이지</a>
+                <a href={`/api/forms/${s.form_id || s.id}`} target="_blank" className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800">폼 JSON</a>
               </div>
             </div>
           ))}
-          {!loading && surveys.length===0 && <p className="text-sm text-zinc-600">아직 설문이 없습니다. 위 폼에서 생성하거나 Supabase에 직접 insert 하세요. (env 미설정 시 목업으로 빈 목록 표시)</p>}
+          {!loading && surveys.length===0 && <p className="text-sm text-zinc-600 dark:text-zinc-400">아직 설문이 없습니다. 위 폼에서 생성하거나 Supabase에 직접 insert 하세요. (env 미설정 시 목업으로 빈 목록 표시)</p>}
         </div>
+      </div>
+
+      <div className="mt-10 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 bg-zinc-50 dark:bg-zinc-900">
+        <h3 className="font-semibold text-zinc-900 dark:text-white">도움말 · 관리자 이용 안내</h3>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">이전 하단 ‘N’ 버튼의 영문 안내를 한글로 교체한 내용입니다.</p>
+        <ul className="mt-4 space-y-2 text-sm text-zinc-700 dark:text-zinc-300 list-disc list-inside leading-relaxed">
+          <li><span className="font-medium">설문 생성:</span> 설문 제목과 Google Form ID를 입력하고 기간을 설정한 뒤 ‘설문 저장’을 누르세요.</li>
+          <li><span className="font-medium">테마 변경:</span> 화면 좌측 하단의 ‘다크 모드 / 라이트 모드’ 버튼을 누르면 기능 창이 아닌 <span className="font-semibold">페이지 전체</span>의 색상이 전환됩니다.</li>
+          <li><span className="font-medium">중복 방지:</span> 없음 / 쿠키 / 이메일 중 선택 — 이메일 선택 시 응답 목록에서 자동 검증됩니다.</li>
+          <li><span className="font-medium">문의:</span> krids.org@gmail.com 로 워드 파일과 기간을 보내면 종료 후 그래프·시트가 자동 발송됩니다.</li>
+        </ul>
       </div>
     </div>
   );
