@@ -27,9 +27,9 @@ export type SupportedQuestionType = typeof SUPPORTED_QUESTION_TYPES[number];
 
 export const LANDING_DATA = {
   hero: {
-    badge: "모아폼 스타일 · 구글 시트 연동",
+    badge: "krids 스타일 · 구글 시트 연동",
     title: "브랜드에 맞는<br />커스텀 설문조사 SaaS",
-    subtitle: "Google Forms의 강력한 백엔드와 Sheets 저장소 위에,あなたの 브랜드 UI를 입히세요. 코드 한 줄 없이 설문을 배포하고 응답을 자동 집계합니다.",
+    subtitle: "Google Forms의 강력한 백엔드와 Sheets 저장소 위에,귀교의 브랜드 UI를 입히세요. 코드 한 줄 없이 설문을 배포하고 응답을 자동 집계합니다.",
     ctaPrimary: "무료로 시작하기",
     ctaSecondary: "데모 설문 보기",
   },
@@ -43,11 +43,11 @@ export const LANDING_DATA = {
   ],
   templates: [
     { id: "t1", title: "고객 만족도 조사", category: "CSAT", questions: 8, color: "bg-violet-500" },
-    { id: "t2", title: "신입 채용 지원서", category: "HR", questions: 12, color: "bg-blue-500" },
+    { id: "t2", title: "강의 평가", category: "Education", questions: 12, color: "bg-blue-500" },
     { id: "t3", title: "이벤트 참가 신청", category: "Event", questions: 6, color: "bg-emerald-500" },
-    { id: "t4", title: "제품 피드백", category: "Product", questions: 10, color: "bg-orange-500" },
+    { id: "t4", title: "대학생활과 수업 만족도 조사", category: "Education", questions: 10, color: "bg-orange-500" },
     { id: "t5", title: "교육 과정 평가", category: "Education", questions: 9, color: "bg-pink-500" },
-    { id: "t6", title: "시장 조사", category: "Research", questions: 15, color: "bg-cyan-500" },
+    { id: "t6", title: "교육 신청서", category: "Education", questions: 15, color: "bg-cyan-500" },
   ],
   pricing: [
     { name: "Starter", price: "₩0", period: "/월", features: ["설문 3개", "월 응답 100건", "기본 커스텀 UI", "이메일 확인 발송"], cta: "무료 시작", popular: false },
