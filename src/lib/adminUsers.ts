@@ -89,8 +89,14 @@ export async function createSupervisor(id: string, pw: string): Promise<{ ok: bo
 
   if (supabase) {
     const { error } = await supabase.from("admin_users").insert({ id, password: pw, role: "supervisor" });
-    if (error) return { ok: false, error: error.message };
-    return { ok: true };
+    if (!error) return { ok: true };
+    // 테이블 미생성 시 파일 fallback
+    if (error.message.includes("Could not find the table") || error.message.includes("schema cache")) {
+      const next = [...users, { id, password: pw, role: "supervisor" as const, created_at: new Date().toISOString() }];
+      setMem(next);
+      return { ok: true };
+    }
+    return { ok: false, error: error.message };
   } else {
     const next = [...users, { id, password: pw, role: "supervisor" as const, created_at: new Date().toISOString() }];
     setMem(next);
@@ -103,8 +109,17 @@ export async function updateSupervisorPassword(id: string, newPw: string): Promi
   const supabase = getSupabaseAdmin();
   if (supabase) {
     const { error } = await supabase.from("admin_users").update({ password: newPw }).eq("id", id).eq("role", "supervisor");
-    if (error) return { ok: false, error: error.message };
-    return { ok: true };
+    if (!error) return { ok: true };
+    if (error.message.includes("Could not find the table") || error.message.includes("schema cache")) {
+      const users = getMem();
+      const idx = users.findIndex(u => u.id === id);
+      if (idx === -1) return { ok: false, error: "존재하지 않는 계정입니다." };
+      const next = [...users];
+      next[idx] = { ...next[idx], password: newPw };
+      setMem(next);
+      return { ok: true };
+    }
+    return { ok: false, error: error.message };
   } else {
     const users = getMem();
     const idx = users.findIndex(u => u.id === id);
@@ -120,8 +135,16 @@ export async function deleteSupervisor(id: string): Promise<{ ok: boolean; error
   const supabase = getSupabaseAdmin();
   if (supabase) {
     const { error } = await supabase.from("admin_users").delete().eq("id", id).eq("role", "supervisor");
-    if (error) return { ok: false, error: error.message };
-    return { ok: true };
+    if (!error) return { ok: true };
+    if (error.message.includes("Could not find the table") || error.message.includes("schema cache")) {
+      const users = getMem();
+      const next = users.filter(u => u.id !== id);
+      if (next.length === users.length) return { ok: false, error: "존재하지 않는 계정입니다." };
+      if (next.length === 0) return { ok: false, error: "최소 1명의 Supervisor는 유지해야 합니다." };
+      setMem(next);
+      return { ok: true };
+    }
+    return { ok: false, error: error.message };
   } else {
     const users = getMem();
     const next = users.filter(u => u.id !== id);
