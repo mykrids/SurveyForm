@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { ParsedForm } from "@/lib/forms";
+import { checkEmailTypo } from "@/lib/emailTypo";
 
 export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const [form, setForm] = useState<ParsedForm | null>(null);
@@ -19,8 +20,15 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
 
   function setAns(id: string, v: string | string[]) { setAnswers(a=>({ ...a, [id]: v })); }
 
+  const emailTypo = email ? checkEmailTypo(email) : null;
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (emailTypo && !emailTypo.ok) {
+      const sug = emailTypo.suggestion ? ` → ‘${emailTypo.suggestion}’(으)로 교정해 보세요.` : "";
+      setStatus(`이메일 오타 차단: ${emailTypo.reason}${sug}`);
+      return;
+    }
     setStatus("제출 중…");
     // cookie duplicate check (client side helper)
     const dupKey = `survey_${surveyId}_submitted`;
@@ -30,7 +38,11 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     const payload = { surveyId, email, answers };
     const r = await fetch("/api/submit", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
     const j = await r.json();
-    if (!r.ok) { setStatus(`오류: ${j.error}`); return; }
+    if (!r.ok) {
+      const sug = j.suggestion ? ` → ‘${j.suggestion}’(으)로 교정해 보세요.` : "";
+      setStatus(`오류: ${j.error}${sug}`);
+      return;
+    }
     localStorage.setItem(dupKey, "1");
     // set cookie too for server check
     document.cookie = `${dupKey}=1; path=/; max-age=31536000`;
@@ -63,10 +75,18 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
          </div>
        )}
        {status && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{status}</p>}
-       <form onSubmit={submit} className="mt-6 space-y-5 border dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
-        <label className="block text-sm">이메일 (중복 체크·확인 메일용)
-          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="mt-1 w-full border rounded-lg px-3 py-2" placeholder="you@example.com" />
-        </label>
+        <form onSubmit={submit} className="mt-6 space-y-5 border dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
+         <label className="block text-sm dark:text-white">이메일 (중복 체크·확인 메일용)
+           <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className={`mt-1 w-full border rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 ${emailTypo && !emailTypo.ok ? "border-red-300 dark:border-red-700" : "border-zinc-300 dark:border-zinc-700"}`} placeholder="you@example.com" />
+           {emailTypo && !emailTypo.ok ? (
+             <div className="mt-1 text-xs flex items-center gap-2">
+               <span className="text-red-600 dark:text-red-400">⚠️ {emailTypo.reason}</span>
+               {emailTypo.suggestion && <button type="button" onClick={()=>setEmail(emailTypo.suggestion!)} className="underline text-blue-600 dark:text-blue-400">‘{emailTypo.suggestion}’로 교정</button>}
+             </div>
+           ) : emailTypo && emailTypo.ok ? (
+             <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">오타(never.com→naver.com 등) 자동 검사됨 — @ 누락·도메인 오타 시 제출 차단</p>
+           ) : null}
+         </label>
         {form.questions.map(q=>(
           <div key={q.id} className="border-t pt-4 first:border-0 first:pt-0">
             <label className="text-sm font-medium">{q.title} {q.required && <span className="text-red-500">*</span>}</label>

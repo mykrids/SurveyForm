@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { verifyToken, COOKIE_NAME } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,15 @@ export const dynamic = "force-dynamic";
 const mem: Record<string, unknown>[] = (globalThis as unknown as { __memSurveys?: Record<string, unknown>[] }).__memSurveys || [];
 (globalThis as unknown as { __memSurveys: Record<string, unknown>[] }).__memSurveys = mem;
 
-export async function GET() {
+function requireAdmin(req: NextRequest) {
+  const token = req.cookies.get(COOKIE_NAME)?.value;
+  if (!token) return null;
+  return verifyToken(token);
+}
+
+export async function GET(req: NextRequest) {
+  const role = requireAdmin(req);
+  if (!role) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 });
   const supabase = getSupabaseAdmin();
   if (!supabase) {
     return NextResponse.json({ surveys: mem, warning: "Supabase 미설정 — 메모리 목업 반환" });
@@ -18,6 +27,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const role = requireAdmin(req);
+  if (!role) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 });
   const body = await req.json();
   const { title, form_id, start_at, end_at, report_delay_hours, duplicate_check_type, end_message_preset, gas_webapp_url, admin_email } = body;
   if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });

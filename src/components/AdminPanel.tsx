@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { DUPLICATE_CHECK_TYPES, END_MESSAGE_PRESETS } from "@/lib/constants";
 import { getDuplicateWarning } from "@/lib/duplicate";
+import { checkEmailTypo } from "@/lib/emailTypo";
 
 type Survey = {
   id: string;
@@ -32,7 +33,7 @@ const CURRENT_VALUES = {
   adminEmail: "krids.org@gmail.com",
 };
 
-export default function AdminPanel() {
+export default function AdminPanel({ role }: { role?: "administrator" | "supervisor" }) {
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<Partial<Survey>>({
@@ -61,6 +62,13 @@ export default function AdminPanel() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (form.admin_email) {
+      const typo = checkEmailTypo(form.admin_email);
+      if (!typo.ok) {
+        setMsg(`오류: 관리자 이메일 오타 — ${typo.reason}`);
+        return;
+      }
+    }
     setMsg("저장 중…");
     const r = await fetch("/api/admin/surveys", { method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(form) });
     const j = await r.json();
@@ -74,11 +82,18 @@ export default function AdminPanel() {
 
   const warning = getDuplicateWarning(form.duplicate_check_type || "none");
   const selectedPreset = END_MESSAGE_PRESETS[form.end_message_preset as keyof typeof END_MESSAGE_PRESETS] || END_MESSAGE_PRESETS["1"];
+  const adminEmailTypo = form.admin_email ? checkEmailTypo(form.admin_email) : null;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8 bg-background text-foreground">
-      <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">관리자 설정 패널</h1>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">관리자 설정 패널</h1>
+        {role && <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${role === "administrator" ? "bg-zinc-900 dark:bg-white dark:text-black text-white" : "bg-blue-600 text-white"}`}>{role === "administrator" ? "Administrator" : "Supervisor"} 모드</span>}
+      </div>
       <p className="text-sm text-zinc-700 dark:text-zinc-300 mt-1">설문 기간·중복방지·종료메시지·GAS URL을 설정합니다. 저장은 Supabase(surveys) + service_role 경유.</p>
+      <div className="mt-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 px-3 py-2 text-xs leading-relaxed">
+        <span className="font-semibold text-blue-900 dark:text-blue-200">분리 운영:</span> <span className="text-blue-800 dark:text-blue-300">구글 설문지 폼의 문항 편집/공유는 관리자 기능과 분리되어 있습니다 — 폼 수정은 drive.google.com에서 직접 하고, 관리자 대시보드에서는 <b>Form ID 연결만</b> 하면 됩니다. (네, 그렇게 운영하면 됩니다)</span>
+      </div>
 
       {/* 현재 시스템 설정 - 자동 입력됨 */}
       <div className="mt-6 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-zinc-50 dark:bg-zinc-900">
@@ -182,8 +197,15 @@ export default function AdminPanel() {
         </label>
         <label className="text-sm font-medium text-zinc-900 dark:text-white">
           관리자 이메일 (PDF 수신) <span className="text-xs text-zinc-500 font-normal">항상 동일: krids.org@gmail.com</span>
-          <input type="email" value={form.admin_email||""} onChange={e=>setForm({...form,admin_email:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="krids.org@gmail.com (자동 입력됨)" />
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">보고서 PDF가 이 메일로 자동 발송됩니다 — 변경 없으면 그대로 두세요</span>
+          <input type="email" value={form.admin_email||""} onChange={e=>setForm({...form,admin_email:e.target.value})} className={`mt-1 w-full border rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900 ${adminEmailTypo && !adminEmailTypo.ok ? "border-red-300 dark:border-red-700" : "border-zinc-300 dark:border-zinc-700"}`} placeholder="krids.org@gmail.com (자동 입력됨)" />
+          {adminEmailTypo && !adminEmailTypo.ok ? (
+            <div className="mt-1 flex items-center gap-2 text-xs">
+              <span className="text-red-600 dark:text-red-400">⚠️ {adminEmailTypo.reason} — 오타 차단됨</span>
+              {adminEmailTypo.suggestion && <button type="button" onClick={()=>setForm({...form, admin_email: adminEmailTypo.suggestion})} className="underline text-blue-600 dark:text-blue-400">‘{adminEmailTypo.suggestion}’로 교정</button>}
+            </div>
+          ) : (
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">보고서 PDF가 이 메일로 자동 발송됩니다 — 오타(never.com 등) 자동 차단됨</span>
+          )}
         </label>
         <button type="submit" className="rounded-full bg-black dark:bg-white dark:text-black text-white px-6 py-2 text-sm font-medium self-start hover:bg-zinc-800 dark:hover:bg-zinc-200 transition">설문 저장</button>
         {msg && <p className="text-sm text-zinc-700 dark:text-zinc-300 font-medium">{msg}</p>}

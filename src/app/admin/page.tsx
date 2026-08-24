@@ -1,2 +1,2 @@
-import AdminPanel from "@/components/AdminPanel";
-export default function AdminPage() { return <AdminPanel />; }
+import AdminGate from "@/components/AdminGate";
+export default function AdminPage() { return <AdminGate />; }

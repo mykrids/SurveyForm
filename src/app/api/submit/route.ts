@@ -5,6 +5,7 @@ import { normalizeEmail } from "@/lib/duplicate";
 import { gasWrite } from "@/lib/gas";
 import { sendConfirmationEmail } from "@/lib/email";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
+import { checkEmailTypo } from "@/lib/emailTypo";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { surveyId, email, answers } = body as { surveyId: string; email?: string; answers: Record<string, string | string[]> };
   if (!surveyId || !answers) return NextResponse.json({ error: "surveyId, answers required" }, { status: 400 });
+
+  // 이메일 오타 사전 차단 ( @ 누락, never.com→naver.com 등 )
+  if (email) {
+    const typo = checkEmailTypo(email);
+    if (!typo.ok) return NextResponse.json({ error: typo.reason, suggestion: typo.suggestion }, { status: 400 });
+  }
 
   const supabase = getSupabaseAdmin();
   let survey: Record<string, unknown> | null = null;
