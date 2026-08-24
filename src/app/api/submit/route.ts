@@ -73,8 +73,9 @@ export async function POST(req: NextRequest) {
     identifier = `cookie:${ip}`;
   }
 
-  // 3) GAS write (Next.js → GAS, Secret 헤더)
-  const gasUrl = (survey.gas_webapp_url as string) || process.env.GAS_WEBAPP_URL || "";
+  // 3) GAS write (Next.js → GAS, Secret 헤더) — demo는 시트 저장 없음 (UI 미리보기 전용)
+  const isDemo = surveyId === "demo";
+  const gasUrl = isDemo ? "" : ((survey.gas_webapp_url as string) || process.env.GAS_WEBAPP_URL || "");
   const payload = {
     surveyId, email: identifier || email || null,
     answers, submittedAt: now.toISOString(),
@@ -82,7 +83,9 @@ export async function POST(req: NextRequest) {
     row: { _surveyId: surveyId, _email: identifier || email || "", _submittedAt: now.toISOString(), ...answers },
   };
 
-  if (gasUrl) {
+  if (isDemo) {
+    console.log("[submit] demo 모드 — GAS 시트 저장 스킵 (구글시트와 무관)");
+  } else if (gasUrl) {
     try {
       await gasWrite(gasUrl, payload);
     } catch (e: unknown) {
@@ -97,23 +100,25 @@ export async function POST(req: NextRequest) {
     console.warn("[submit] GAS_WEBAPP_URL 미설정 — 시트 저장 스킵 (데모 모드)");
   }
 
-  // 4) 중복 로그 기록 (Supabase)
-  if (supabase && identifier) {
+  // 4) 중복 로그 기록 (Supabase) — demo는 기록 안 함
+  if (!isDemo && supabase && identifier) {
     await supabase.from("survey_responses_log").insert({
       survey_id: surveyId, respondent_identifier: identifier, submitted_at: now.toISOString(),
     });
   }
 
-  // 5) 즉시 확인 메일 (payload + preset 그대로 사용, 시트 재조회 없음)
+  // 5) 즉시 확인 메일 (payload + preset 그대로 사용, 시트 재조회 없음) — demo는 메일도 스킵
   const presetId = (survey.end_message_preset as string) || "1";
   const preset = END_MESSAGE_PRESETS[presetId as keyof typeof END_MESSAGE_PRESETS] || END_MESSAGE_PRESETS["1"];
-  if (email) {
+  if (!isDemo && email) {
     try {
       await sendConfirmationEmail(email, preset.label, preset.body, survey.title as string);
     } catch (e) {
       console.error("[submit] email failed", e);
       // don't fail submission on email error
     }
+  } else if (isDemo) {
+    console.log("[submit] demo 모드 — 확인 메일 스킵");
   }
 
   // 6) 완료 페이지용 preset 반환 + cookie set
