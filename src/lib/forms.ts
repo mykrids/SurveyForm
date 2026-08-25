@@ -87,8 +87,22 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
       } else {
         type = "UNSUPPORTED";
       }
-    } else if (scaleQuestion || dateQuestion || timeQuestion || fileUploadQuestion || rowQuestion) {
-      rawType = scaleQuestion ? "SCALE" : dateQuestion ? "DATE" : timeQuestion ? "TIME" : fileUploadQuestion ? "FILE_UPLOAD" : "GRID";
+    } else if (scaleQuestion) {
+      rawType = "SCALE";
+      const sq = scaleQuestion as Record<string, unknown>;
+      const low = Number(sq.low ?? 1);
+      const high = Number(sq.high ?? 7);
+      const lowLabel = (sq.lowLabel as string) || "";
+      const highLabel = (sq.highLabel as string) || "";
+      options = [];
+      for (let i = low; i <= high; i++) {
+        if (i === low && lowLabel) options.push(`${i} - ${lowLabel}`);
+        else if (i === high && highLabel) options.push(`${i} - ${highLabel}`);
+        else options.push(String(i));
+      }
+      type = "RADIO";
+    } else if (dateQuestion || timeQuestion || fileUploadQuestion || rowQuestion) {
+      rawType = dateQuestion ? "DATE" : timeQuestion ? "TIME" : fileUploadQuestion ? "FILE_UPLOAD" : "GRID";
       type = "UNSUPPORTED";
     }
 
