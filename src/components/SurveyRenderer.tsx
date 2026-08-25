@@ -89,12 +89,20 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
      );
    }
 
-   if (!form) return <div className="mx-auto max-w-xl px-6 py-16 text-center text-zinc-500 dark:text-zinc-400">설문 로딩 중…</div>;
+    if (!form) return <div className="mx-auto max-w-xl px-6 py-16 text-center text-zinc-500 dark:text-zinc-400">설문 로딩 중…</div>;
 
-    return (
-      <div className="mx-auto max-w-xl px-6 py-8">
-        <h1 className="text-2xl font-bold dark:text-white">{form.title}</h1>
-        {form.description && <p className="text-sm text-zinc-600 dark:text-zinc-300 mt-1 whitespace-pre-wrap leading-relaxed">{form.description}</p>}
+    function renderDesc(text: string) {
+      const parts = text.split(/(\*\*.*?\*\*)/g);
+      return parts.map((p, i) => {
+        if (p.startsWith("**") && p.endsWith("**")) return <strong key={i} className="font-semibold text-zinc-900 dark:text-white">{p.slice(2, -2)}</strong>;
+        return <span key={i}>{p}</span>;
+      });
+    }
+
+     return (
+       <div className="mx-auto max-w-xl px-6 py-8">
+         <h1 className="text-2xl font-bold dark:text-white">{form.title}</h1>
+         {form.description && <div className="text-sm text-zinc-600 dark:text-zinc-300 mt-2 whitespace-pre-wrap leading-relaxed">{renderDesc(form.description)}</div>}
         {form.unsupported.length>0 && (
           <div className="mt-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-sm text-amber-800 dark:text-amber-200">
             ⚠️ 지원되지 않는 문항 {form.unsupported.length}개가 있어 표시하지 않았습니다.
@@ -157,7 +165,27 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
             {q.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{q.description}</p>}
             {q.type==="TEXT" && <input value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" placeholder="단답형" />}
             {q.type==="PARAGRAPH_TEXT" && <textarea value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" rows={4} placeholder="장문형" />}
-            {q.type==="RADIO" && <div className="mt-2 space-y-2">{q.options?.map(opt=>(
+            {q.type==="RADIO" && q.rawType==="SCALE" && (
+              <div className="mt-3 overflow-x-auto">
+                <div className="min-w-[420px] border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                  <div className="grid" style={{gridTemplateColumns:`80px repeat(${q.options?.length||7},1fr) 80px`}}>
+                    <div className="text-[11px] text-zinc-400 p-2"></div>
+                    {(q.options||[]).map(o=><div key={o} className="text-center text-xs font-medium text-zinc-700 dark:text-zinc-300 p-2">{o}</div>)}
+                    <div className="text-[11px] text-zinc-400 p-2"></div>
+                  </div>
+                  <div className="grid border-t dark:border-zinc-700" style={{gridTemplateColumns:`80px repeat(${q.options?.length||7},1fr) 80px`}}>
+                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2 text-right pr-1">{q.scaleLowLabel || "전혀 그렇지 않다"}</div>
+                    {(q.options||[]).map(o=>(
+                      <label key={o} className="flex justify-center items-center p-2">
+                        <input type="radio" name={q.id} checked={answers[q.id]===o} onChange={()=>setAns(q.id,o)} required={q.required} className="accent-zinc-900" />
+                      </label>
+                    ))}
+                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2">{q.scaleHighLabel || "매우 그렇다"}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {q.type==="RADIO" && q.rawType!=="SCALE" && <div className="mt-2 space-y-2">{q.options?.map(opt=>(
               <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="radio" name={q.id} checked={answers[q.id]===opt} onChange={()=>setAns(q.id,opt)} required={q.required} />{opt}</label>
             ))}</div>}
             {q.type==="CHECKBOX" && <div className="mt-2 space-y-2">{q.options?.map(opt=>{

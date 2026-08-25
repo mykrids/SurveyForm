@@ -6,6 +6,10 @@ export type ParsedQuestion = {
   rawType?: string;
   options?: string[];
   description?: string;
+  scaleLow?: number;
+  scaleHigh?: number;
+  scaleLowLabel?: string;
+  scaleHighLabel?: string;
 };
 
 export type ParsedForm = {
@@ -95,12 +99,11 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
       const lowLabel = (sq.lowLabel as string) || "";
       const highLabel = (sq.highLabel as string) || "";
       options = [];
-      for (let i = low; i <= high; i++) {
-        if (i === low && lowLabel) options.push(`${i} - ${lowLabel}`);
-        else if (i === high && highLabel) options.push(`${i} - ${highLabel}`);
-        else options.push(String(i));
-      }
+      for (let i = low; i <= high; i++) options.push(String(i));
       type = "RADIO";
+      const parsedScale: ParsedQuestion = { id: qId, title: qTitle, type, required, rawType, options, scaleLow: low, scaleHigh: high, scaleLowLabel: lowLabel, scaleHighLabel: highLabel };
+      questions.push(parsedScale);
+      continue;
     } else if (dateQuestion || timeQuestion || fileUploadQuestion || rowQuestion) {
       rawType = dateQuestion ? "DATE" : timeQuestion ? "TIME" : fileUploadQuestion ? "FILE_UPLOAD" : "GRID";
       type = "UNSUPPORTED";
