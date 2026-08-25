@@ -79,7 +79,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
 
    if (done) {
       return (
-        <div className="mx-auto max-w-[1280px] w-full px-6 py-16 text-center" style={{maxWidth:1280}}>
+        <div className="mx-auto max-w-[1024px] w-full px-6 py-16 text-center" style={{maxWidth:1024}}>
           <div className="border dark:border-zinc-800 rounded-2xl p-8 bg-white dark:bg-zinc-900">
             <h2 className="text-xl font-bold dark:text-white">{done.presetLabel}</h2>
             <p className="mt-2 text-zinc-600 dark:text-zinc-300">{done.presetBody}</p>
@@ -90,7 +90,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
       );
     }
 
-    if (!form) return <div className="mx-auto max-w-[1280px] w-full px-6 py-16 text-center text-zinc-500 dark:text-zinc-400" style={{maxWidth:1280}}>설문 로딩 중…</div>;
+    if (!form) return <div className="mx-auto max-w-[1024px] w-full px-6 py-16 text-center text-zinc-500 dark:text-zinc-400" style={{maxWidth:1024}}>설문 로딩 중…</div>;
 
     function renderDesc(text: string) {
       return text.split("\n").map((line, li) => {
@@ -173,7 +173,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   }
 
       return (
-       <div className="mx-auto max-w-[1280px] w-full px-6 py-8" style={{maxWidth:1280}}>
+       <div className="mx-auto max-w-[1024px] w-full px-6 py-8" style={{maxWidth:1024}}>
          <h1 className="text-2xl font-bold dark:text-white">{form.title}</h1>
          {form.description && <div className="text-sm text-zinc-600 dark:text-zinc-300 mt-2 whitespace-pre-wrap leading-relaxed space-y-1">{renderDesc(form.description)}</div>}
         {form.unsupported.length>0 && (
