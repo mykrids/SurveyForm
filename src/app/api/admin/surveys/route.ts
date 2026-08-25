@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { verifyToken, COOKIE_NAME } from "@/lib/auth";
+import { validateTaxonomyFields, type TaxonomyField } from "@/lib/taxonomy";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +31,13 @@ export async function POST(req: NextRequest) {
   const role = requireAdmin(req);
   if (!role) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 });
   const body = await req.json();
-  const { title, form_id, start_at, end_at, report_delay_hours, duplicate_check_type, end_message_preset, gas_webapp_url, admin_email } = body;
+  const { title, form_id, start_at, end_at, report_delay_hours, duplicate_check_type, end_message_preset, gas_webapp_url, admin_email, taxonomy_fields } = body;
   if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });
+  const taxFields = (taxonomy_fields as TaxonomyField[] | undefined) || [];
+  if (taxFields.length > 0) {
+    const err = validateTaxonomyFields(taxFields);
+    if (err) return NextResponse.json({ error: `taxonomy_fields 오류: ${err}` }, { status: 400 });
+  }
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -45,6 +51,7 @@ export async function POST(req: NextRequest) {
       gas_webapp_url: gas_webapp_url || null,
       admin_email: admin_email || null,
       report_sent: false, report_sent_at: null, created_at: new Date().toISOString(),
+      taxonomy_fields: taxFields,
     };
     mem.unshift(row);
     return NextResponse.json({ survey: row, warning: "Supabase 미설정 — 메모리에 저장됨 (재시작 시 유실)" });
@@ -60,6 +67,7 @@ export async function POST(req: NextRequest) {
     gas_webapp_url: gas_webapp_url || null,
     admin_email: admin_email || null,
     report_sent: false,
+    taxonomy_fields: taxFields,
   };
   const { data, error } = await supabase.from("surveys").insert(payload).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

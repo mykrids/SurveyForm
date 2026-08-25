@@ -6,6 +6,7 @@ import { gasWrite } from "@/lib/gas";
 import { sendConfirmationEmail } from "@/lib/email";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
 import { checkEmailTypo } from "@/lib/emailTypo";
+import { validateTaxonomyValues, type TaxonomyField } from "@/lib/taxonomy";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,9 @@ export async function POST(req: NextRequest) {
   if (!rl.ok) return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." }, { status: 429 });
 
   const body = await req.json();
-  const { surveyId, email, answers } = body as { surveyId: string; email?: string; answers: Record<string, string | string[]> };
+  const { surveyId, email, answers, taxonomy } = body as { surveyId: string; email?: string; answers: Record<string, string | string[]>; taxonomy?: Record<string, string> };
   if (!surveyId || !answers) return NextResponse.json({ error: "surveyId, answers required" }, { status: 400 });
+  const taxonomyValues = taxonomy || {};
 
   // 이메일 오타 사전 차단 ( @ 누락, never.com→naver.com 등 )
   if (email) {
@@ -54,6 +56,11 @@ export async function POST(req: NextRequest) {
   if (startAt && now < startAt) return NextResponse.json({ error: `설문 시작 전입니다. 시작: ${startAt.toISOString()}` }, { status: 403 });
   if (endAt && now > endAt) return NextResponse.json({ error: `설문이 종료되었습니다. 종료: ${endAt.toISOString()}` }, { status: 403 });
 
+  // 1-2) 분류 필드 검증 (유연)
+  const taxonomyFields = (survey.taxonomy_fields as TaxonomyField[] | undefined) || [];
+  const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
+  if (taxErr) return NextResponse.json({ error: taxErr }, { status: 400 });
+
   // 2) 중복 검증
   const dupType = (survey.duplicate_check_type as string) || "none";
   let identifier: string | null = null;
@@ -74,13 +81,15 @@ export async function POST(req: NextRequest) {
   }
 
   // 3) GAS write (Next.js → GAS, Secret 헤더) — demo는 시트 저장 없음 (UI 미리보기 전용)
+  // taxonomy는 시트에 taxonomy_{key} 컬럼으로 flatten
   const isDemo = surveyId === "demo";
   const gasUrl = isDemo ? "" : ((survey.gas_webapp_url as string) || process.env.GAS_WEBAPP_URL || "");
+  const taxonomyRow: Record<string, string> = {};
+  for (const [k, v] of Object.entries(taxonomyValues)) taxonomyRow[`taxonomy_${k}`] = v;
   const payload = {
     surveyId, email: identifier || email || null,
-    answers, submittedAt: now.toISOString(),
-    // flatten for sheet row: questionId -> value
-    row: { _surveyId: surveyId, _email: identifier || email || "", _submittedAt: now.toISOString(), ...answers },
+    answers, taxonomy: taxonomyValues, submittedAt: now.toISOString(),
+    row: { _surveyId: surveyId, _email: identifier || email || "", _submittedAt: now.toISOString(), ...taxonomyRow, ...answers },
   };
 
   if (isDemo) {

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { DUPLICATE_CHECK_TYPES, END_MESSAGE_PRESETS } from "@/lib/constants";
 import { getDuplicateWarning } from "@/lib/duplicate";
 import { checkEmailTypo } from "@/lib/emailTypo";
+import { slugify, validateTaxonomyFields, type TaxonomyField } from "@/lib/taxonomy";
 
 type Survey = {
   id: string;
@@ -16,6 +17,7 @@ type Survey = {
   admin_email: string | null;
   report_sent: boolean;
   form_id: string | null;
+  taxonomy_fields?: TaxonomyField[];
 };
 
 // 현재 시스템에 설정된 실제 값 ( .env 기준 ) — 테스트용 자동 입력 (비밀값은 마스킹)
@@ -36,7 +38,7 @@ const CURRENT_VALUES = {
 export default function AdminPanel({ role }: { role?: "administrator" | "supervisor" }) {
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState<Partial<Survey>>({
+  const [form, setForm] = useState<Partial<Survey> & { taxonomy_fields?: TaxonomyField[] }>({
     title: "",
     form_id: "",
     start_at: "",
@@ -46,8 +48,13 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
     end_message_preset: "1",
     gas_webapp_url: CURRENT_VALUES.gasUrl,
     admin_email: CURRENT_VALUES.adminEmail,
+    taxonomy_fields: [],
   });
   const [msg, setMsg] = useState("");
+  const [newTaxLabel, setNewTaxLabel] = useState("");
+  const [newTaxType, setNewTaxType] = useState<"text"|"select">("text");
+  const [newTaxHidden, setNewTaxHidden] = useState(false);
+  const [newTaxOptions, setNewTaxOptions] = useState("");
 
   async function load() {
     setLoading(true);
@@ -60,6 +67,25 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
   }
   useEffect(()=>{ load(); },[]);
 
+  function addTaxonomy() {
+    const label = newTaxLabel.trim();
+    if (!label) { setMsg("오류: 분류 라벨(예: 교수명, 학과명)을 입력하세요"); return; }
+    const key = slugify(label);
+    const fields = form.taxonomy_fields || [];
+    if (fields.some(f=>f.key===key)) { setMsg(`오류: 이미 존재하는 분류 키: ${key} (${label})`); return; }
+    const opts = newTaxType==="select" ? newTaxOptions.split(",").map(s=>s.trim()).filter(Boolean) : undefined;
+    if (newTaxType==="select" && (!opts || opts.length===0)) { setMsg("오류: 선택형은 옵션을 콤마로 구분해 입력하세요 (예: 국문과,컴퓨터공학,경영학과)"); return; }
+    const field: TaxonomyField = { key, label, type: newTaxType, required: true, hidden: newTaxHidden, ...(opts ? { options: opts } : {}) };
+    const next = [...fields, field];
+    const err = validateTaxonomyFields(next);
+    if (err) { setMsg(`오류: ${err}`); return; }
+    setForm({ ...form, taxonomy_fields: next });
+    setNewTaxLabel(""); setNewTaxOptions(""); setMsg(`분류 추가됨: ${label} → ${key}`);
+  }
+  function removeTaxonomy(key: string) {
+    setForm({ ...form, taxonomy_fields: (form.taxonomy_fields||[]).filter(f=>f.key!==key) });
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (form.admin_email) {
@@ -69,13 +95,17 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
         return;
       }
     }
+    if (form.taxonomy_fields) {
+      const err = validateTaxonomyFields(form.taxonomy_fields);
+      if (err) { setMsg(`오류: 분류 필드 검증 실패 — ${err}`); return; }
+    }
     setMsg("저장 중…");
     const r = await fetch("/api/admin/surveys", { method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(form) });
     const j = await r.json();
     if (!r.ok) setMsg(`오류: ${j.error || r.status}`);
     else {
       setMsg("저장 완료 — 응답 페이지 링크가 아래 목록에 생성되었습니다.");
-      setForm({ title:"", form_id:"", start_at:"", end_at:"", report_delay_hours:1, duplicate_check_type:"none", end_message_preset:"1", gas_webapp_url: CURRENT_VALUES.gasUrl, admin_email: CURRENT_VALUES.adminEmail });
+      setForm({ title:"", form_id:"", start_at:"", end_at:"", report_delay_hours:1, duplicate_check_type:"none", end_message_preset:"1", gas_webapp_url: CURRENT_VALUES.gasUrl, admin_email: CURRENT_VALUES.adminEmail, taxonomy_fields: [] });
       load();
     }
   }
@@ -180,6 +210,50 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">{selectedPreset.body}</p>
         </div>
         {warning && <p className="text-xs bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-amber-800 dark:text-amber-200">⚠️ {warning}</p>}
+        {/* 분류 필드 (유연) */}
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 p-4">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">🏷️ 분류 필드 (선택) <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">예: 교수명, 학과명, 과목명 등 — 설문별 유연 지정</span></h3>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">설문 응답을 교수/학과/과목 등으로 나누어 집계해야 할 때, 관리자 사이트에서 분류 단어를 직접 지정하세요. 예) 강의평가: <code className="bg-zinc-100 dark:bg-zinc-700 px-1 rounded">교수명</code> + <code className="bg-zinc-100 dark:bg-zinc-700 px-1 rounded">과목명</code>, 교육과정 평가: <code className="bg-zinc-100 dark:bg-zinc-700 px-1 rounded">학과명</code>. 남기면 분류 없이 저장됩니다.</p>
+          {(form.taxonomy_fields||[]).length>0 && (
+            <div className="mt-3 space-y-2">
+              {(form.taxonomy_fields||[]).map(f=>(
+                <div key={f.key} className="flex flex-wrap items-center gap-2 border dark:border-zinc-700 rounded-xl px-3 py-2 bg-white dark:bg-zinc-900 text-xs">
+                  <span className="font-medium text-zinc-900 dark:text-white">{f.label}</span>
+                  <span className="text-zinc-500 dark:text-zinc-400">→ key: {f.key}</span>
+                  <span className={`px-2 py-0.5 rounded-full ${f.type==="select" ? "bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300"}`}>{f.type==="select" ? "선택형" : "단답형"}</span>
+                  {f.hidden && <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">숨김(URL 주입)</span>}
+                  {!f.hidden && <span className="px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">노출(직접 입력)</span>}
+                  {f.options && <span className="text-zinc-500 dark:text-zinc-400">옵션: {f.options.join(", ")}</span>}
+                  <button type="button" onClick={()=>removeTaxonomy(f.key)} className="ml-auto text-red-600 dark:text-red-400 hover:underline">삭제</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 grid md:grid-cols-12 gap-2 items-end">
+            <label className="md:col-span-3 text-xs font-medium text-zinc-900 dark:text-white">
+              라벨 (예: 교수명)
+              <input value={newTaxLabel} onChange={e=>setNewTaxLabel(e.target.value)} placeholder="교수명 / 학과명 / 과목명" className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400" />
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">입력 시 key는 자동 생성({newTaxLabel ? slugify(newTaxLabel) : "—"})</span>
+            </label>
+            <label className="md:col-span-2 text-xs font-medium text-zinc-900 dark:text-white">
+              타입
+              <select value={newTaxType} onChange={e=>setNewTaxType(e.target.value as "text"|"select")} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white">
+                <option value="text">단답형</option>
+                <option value="select">선택형</option>
+              </select>
+            </label>
+            <label className="md:col-span-4 text-xs font-medium text-zinc-900 dark:text-white">
+              옵션 (선택형만, 콤마 구분)
+              <input value={newTaxOptions} onChange={e=>setNewTaxOptions(e.target.value)} placeholder="예: 국문과,컴퓨터공학,경영학과" disabled={newTaxType!=="select"} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 disabled:opacity-50" />
+            </label>
+            <label className="md:col-span-2 text-xs font-medium text-zinc-900 dark:text-white flex items-center gap-2">
+              <input type="checkbox" checked={newTaxHidden} onChange={e=>setNewTaxHidden(e.target.checked)} /> 숨김
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">URL 주입</span>
+            </label>
+            <button type="button" onClick={addTaxonomy} className="md:col-span-1 rounded-full bg-zinc-900 dark:bg-white dark:text-black text-white px-4 py-2 text-xs font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200">추가</button>
+          </div>
+          <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">숨김=체크 시 <code className="bg-zinc-100 dark:bg-zinc-700 px-1 rounded">/s/{"{id}"}?{newTaxLabel?slugify(newTaxLabel):"key"}=값</code> 형태로 링크를 배포하면 응답자에게 보이지 않게 자동 기록. 노출=미체크 시 응답자가 직접 선택/입력.</p>
+        </div>
         {/* 중복 방지 응답자 안내 */}
         <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-3 text-xs leading-relaxed">
           <p className="font-semibold text-blue-900 dark:text-blue-200">응답자 안내 — 중복 방지별 “해야 할 일”</p>
@@ -219,6 +293,8 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
                 <p className="font-medium text-zinc-900 dark:text-white">{s.title} <span className="text-xs text-zinc-500 dark:text-zinc-400">/{s.id.slice(0,8)}</span></p>
                 <p className="text-xs text-zinc-700 dark:text-zinc-300">기간: {s.start_at||"—"} ~ {s.end_at||"—"} · 중복:{s.duplicate_check_type} · 지연:{s.report_delay_hours}h · 리포트:{s.report_sent?"발송됨":"대기"} · preset:{s.end_message_preset}</p>
                 <p className="text-xs text-zinc-600 dark:text-zinc-400">Form: {s.form_id||"—"} · GAS: {s.gas_webapp_url ? s.gas_webapp_url.slice(0,40)+"…" : "—"}</p>
+                {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-xs text-violet-600 dark:text-violet-300 mt-1">분류: {s.taxonomy_fields.map((f: TaxonomyField)=>`${f.label}(${f.key})${f.hidden?"·숨김":""}`).join(", ")}</p>}
+                {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-[11px] text-zinc-500 dark:text-zinc-400">링크 예: /s/{s.id}?{s.taxonomy_fields.map((f: TaxonomyField)=>`${f.key}=값`).join("&")}</p>}
               </div>
               <div className="flex gap-2 self-start">
                 <a href={`/s/${s.id}`} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800">응답 페이지</a>
