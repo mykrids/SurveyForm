@@ -8,7 +8,7 @@ const TEMPLATE_SURVEY_MAP: Record<string, string> = {
   t2: "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
   t3: "983d0315-4c2c-48cc-81b6-c7da291ed20a",
   t4: "afb5c989-95c4-4a8b-9846-e63be0d27b09",
-  t5: "c4429476-179a-47ae-8f63-15c8c56fc315",
+  t5: "e6524f44-b0c7-4897-83c0-d934c5ed5e2a",
   t6: "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
 };
 
