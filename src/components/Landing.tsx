@@ -1,9 +1,39 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 import { LANDING_DATA } from "@/lib/constants";
+
+const TEMPLATE_SURVEY_MAP: Record<string, string> = {
+  t1: "790f4713-0894-49a4-8e93-297f8f68a614",
+  t2: "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
+  t3: "983d0315-4c2c-48cc-81b6-c7da291ed20a",
+  t4: "afb5c989-95c4-4a8b-9846-e63be0d27b09",
+  t5: "c4429476-179a-47ae-8f63-15c8c56fc315",
+  t6: "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
+};
 
 export default function Landing() {
   const { hero, features, templates, pricing } = LANDING_DATA;
+  const [demoGuide, setDemoGuide] = useState(false);
+  const [startGuide, setStartGuide] = useState(false);
+
+  function handleDemoClick(e: React.MouseEvent) {
+    e.preventDefault();
+    setDemoGuide(true);
+  }
+  function handleStartClick(e: React.MouseEvent) {
+    e.preventDefault();
+    setStartGuide(true);
+  }
+  function goTemplates() {
+    setDemoGuide(false);
+    document.getElementById("templates")?.scrollIntoView({ behavior: "smooth" });
+  }
+  function goContact() {
+    setStartGuide(false);
+    document.getElementById("contact")?.scrollIntoView({ behavior: "smooth" });
+  }
+
   return (
     <div className="min-h-screen bg-background text-zinc-900 dark:text-zinc-100">
       <header className="sticky top-0 z-20 bg-white/80 dark:bg-zinc-950/80 backdrop-blur border-b dark:border-zinc-800">
@@ -22,8 +52,8 @@ export default function Landing() {
           <h1 className="text-4xl md:text-5xl font-bold leading-tight dark:text-white" dangerouslySetInnerHTML={{ __html: hero.title }} />
           <p className="mt-4 text-zinc-600 dark:text-zinc-400 leading-relaxed">{hero.subtitle}</p>
           <div className="mt-8 flex gap-3">
-            <Link href="/admin" className="rounded-full bg-black dark:bg-white dark:text-black text-white px-6 py-3 text-sm font-medium">{hero.ctaPrimary}</Link>
-            <Link href="/s/demo" className="rounded-full border border-zinc-300 dark:border-zinc-700 dark:text-white px-6 py-3 text-sm font-medium">데모 설문 보기</Link>
+            <button onClick={handleStartClick} className="rounded-full bg-black dark:bg-white dark:text-black text-white px-6 py-3 text-sm font-medium">{hero.ctaPrimary}</button>
+            <button onClick={handleDemoClick} className="rounded-full border border-zinc-300 dark:border-zinc-700 dark:text-white px-6 py-3 text-sm font-medium">데모 설문 보기</button>
           </div>
           <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Google Forms / GAS / Sheets 연동 · Resend 메일 · Supabase 메타 저장</p>
         </div>
@@ -44,14 +74,14 @@ export default function Landing() {
 
       <section id="templates" className="mx-auto max-w-6xl px-6 py-12">
         <h2 className="text-2xl font-bold dark:text-white">설문 템플릿</h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">선택 시 커스텀 응답 페이지로 이동 (/s/demo)</p>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">카드를 선택하면 해당 데모 설문으로 이동합니다</p>
         <div className="mt-6 grid md:grid-cols-3 gap-4">
           {templates.map(t=>(
-            <Link key={t.id} href="/s/demo" className="border dark:border-zinc-800 rounded-2xl p-5 hover:shadow dark:hover:shadow-zinc-900 transition bg-white dark:bg-zinc-900">
+            <Link key={t.id} href={`/s/${TEMPLATE_SURVEY_MAP[t.id] || "demo"}`} className="border dark:border-zinc-800 rounded-2xl p-5 hover:shadow dark:hover:shadow-zinc-900 transition bg-white dark:bg-zinc-900">
               <div className={`h-2 w-10 rounded-full ${t.color} mb-3`} />
               <span className="text-xs bg-zinc-100 dark:bg-zinc-800 dark:text-zinc-300 px-2 py-1 rounded-full">{t.category}</span>
               <h3 className="font-semibold mt-2 dark:text-white">{t.title}</h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">krids 스타일</p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">데모 진행 가능</p>
             </Link>
           ))}
         </div>
@@ -97,6 +127,31 @@ export default function Landing() {
           <span>© 2026 SurveyForm — krids 스타일 커스텀 설문 SaaS</span>
         </p>
       </footer>
+
+      {demoGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-2xl p-6 border dark:border-zinc-800">
+            <h3 className="font-bold dark:text-white">데모 안내</h3>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">아래 설문 템플릿으로 이동하고 그 중 하나를 선택해서 데모를 진행해 보세요. 데모는 결과에 대한 회신을 하지 않습니다.</p>
+            <div className="mt-5 flex gap-2 justify-end">
+              <button onClick={()=>setDemoGuide(false)} className="rounded-full border dark:border-zinc-700 px-5 py-2 text-sm dark:text-white">닫기</button>
+              <button onClick={goTemplates} className="rounded-full bg-black dark:bg-white dark:text-black text-white px-5 py-2 text-sm">템플릿으로 이동</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {startGuide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-2xl p-6 border dark:border-zinc-800">
+            <h3 className="font-bold dark:text-white">시작 안내</h3>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">하단 문의로 이동하여 읽어보세요. 설문지와 설문 기간을 정해 이메일로 신청하세요. 설문 시작 30일 전에 신청합니다.</p>
+            <div className="mt-5 flex gap-2 justify-end">
+              <button onClick={()=>setStartGuide(false)} className="rounded-full border dark:border-zinc-700 px-5 py-2 text-sm dark:text-white">닫기</button>
+              <button onClick={goContact} className="rounded-full bg-black dark:bg-white dark:text-black text-white px-5 py-2 text-sm">문의로 이동</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
