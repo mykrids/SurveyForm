@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ survey: row, warning: "Supabase 미설정 — 메모리에 저장됨 (재시작 시 유실)" });
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     title, form_id: form_id || null,
     start_at: start_at ? new Date(start_at).toISOString() : null,
     end_at: end_at ? new Date(end_at).toISOString() : null,
@@ -69,7 +69,14 @@ export async function POST(req: NextRequest) {
     report_sent: false,
     taxonomy_fields: taxFields,
   };
-  const { data, error } = await supabase.from("surveys").insert(payload).select().single();
+  let { data, error } = await supabase.from("surveys").insert(payload).select().single();
+  // Fallback: 프로덕션 DB에 taxonomy_fields 컬럼이 아직 없을 때 (schema cache 오류) — 컬럼 없이 재시도
+  if (error && error.message.includes("taxonomy_fields")) {
+    const { taxonomy_fields: _omit, ...fallbackPayload } = payload;
+    const retry = await supabase.from("surveys").insert(fallbackPayload).select().single();
+    if (retry.error) return NextResponse.json({ error: retry.error.message }, { status: 500 });
+    return NextResponse.json({ survey: retry.data, warning: "taxonomy_fields 컬럼 없음 — fallback 저장됨. Supabase에서 마이그레이션 필요." });
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ survey: data });
 }
