@@ -264,9 +264,9 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           </ul>
         </div>
         <label className="text-sm font-medium text-zinc-900 dark:text-white">
-          GAS Web App URL <span className="ml-1 text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">시트 생성 시 갱신</span>
+          GAS Web App URL
           <input value={form.gas_webapp_url||""} onChange={e=>setForm({...form,gas_webapp_url:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900/10 focus:border-zinc-900" placeholder="https://script.google.com/macros/s/…/exec (시트마다 새로 배포 시 URL 변경)" />
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">예시: 현재 값 자동 입력됨 — 새 시트 생성 시 Apps Script 새로 배포 후 URL 교체</span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">배포 후 받은 전체 URL을 그대로 붙여넣으면 됩니다 — 자동으로 저장됨</span>
         </label>
         <label className="text-sm font-medium text-zinc-900 dark:text-white">
           관리자 이메일 (PDF 수신) <span className="text-xs text-zinc-500 font-normal">항상 동일: krids.org@gmail.com</span>
