@@ -10,6 +10,7 @@ export type ParsedQuestion = {
   scaleHigh?: number;
   scaleLowLabel?: string;
   scaleHighLabel?: string;
+  maxChoices?: number;
 };
 
 export type ParsedForm = {
@@ -116,7 +117,13 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
       type = "UNSUPPORTED";
     }
 
-    const parsed: ParsedQuestion = { id: qId, title: qTitle, type, required, rawType, options };
+    // 체크박스 최대 선택 수 추정: 제목에 "최대 N개" 문구로 유추 (Google Forms API는 검증 규칙을 노출하지 않음)
+    let maxChoices: number | undefined;
+    if (type === "CHECKBOX") {
+      const m = qTitle.match(/최대\s*(\d+)\s*개/);
+      if (m) maxChoices = Number(m[1]);
+    }
+    const parsed: ParsedQuestion = { id: qId, title: qTitle, type, required, rawType, options, maxChoices };
     if (type === "UNSUPPORTED") unsupported.push(parsed);
     else questions.push(parsed);
   }

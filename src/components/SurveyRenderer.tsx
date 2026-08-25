@@ -58,6 +58,18 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     }
     const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
     if (taxErr) { setStatus(`분류 오류: ${taxErr}`); return; }
+    // 체크박스 최대 선택 수 검증 (구글폼 "최대 3개" 대응 — Forms API는 검증 규칙을 노출하지 않아 제목으로 유추)
+    if (form) {
+      for (const q of form.questions) {
+        if (q.type === "CHECKBOX" && q.maxChoices) {
+          const arr = (answers[q.id] as string[]) || [];
+          if (arr.length > q.maxChoices) {
+            setStatus(`‘${q.title}’은(는) 최대 ${q.maxChoices}개까지 선택 가능합니다. (${arr.length}/${q.maxChoices})`);
+            return;
+          }
+        }
+      }
+    }
     setStatus("제출 중…");
     const dupKey = `survey_${surveyId}_submitted`;
     if (localStorage.getItem(dupKey)) {
@@ -152,6 +164,13 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
       if (q.required) {
         if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) {
           setStatus(`필수 문항을 입력하세요: ${q.title}`);
+          return;
+        }
+      }
+      if (q.type === "CHECKBOX" && q.maxChoices) {
+        const arr = (v as string[]) || [];
+        if (arr.length > q.maxChoices) {
+          setStatus(`‘${q.title}’은(는) 최대 ${q.maxChoices}개까지 선택 가능합니다. (${arr.length}/${q.maxChoices})`);
           return;
         }
       }
@@ -267,14 +286,23 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
              {q.type==="RADIO" && q.rawType!=="SCALE" && <div className="mt-2 space-y-2">{q.options?.map(opt=>(
                <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="radio" name={q.id} checked={answers[q.id]===opt} onChange={()=>setAns(q.id,opt)} required={q.required} />{opt}</label>
              ))}</div>}
-             {q.type==="CHECKBOX" && <div className="mt-2 space-y-2">{q.options?.map(opt=>{
-               const arr = (answers[q.id] as string[])||[];
-               const checked = arr.includes(opt);
-               return <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="checkbox" checked={checked} onChange={e=>{
-                 const next = e.target.checked ? [...arr, opt] : arr.filter(x=>x!==opt);
-                 setAns(q.id, next);
-               }} />{opt}</label>;
-             })}</div>}
+             {q.type==="CHECKBOX" && (()=>{ const arr = (answers[q.id] as string[])||[]; const atLimit = q.maxChoices ? arr.length >= q.maxChoices : false; return (
+                <div className="mt-2 space-y-2">
+                  {q.maxChoices && <p className={`text-[11px] ${arr.length > q.maxChoices ? "text-red-600 dark:text-red-400" : "text-zinc-500 dark:text-zinc-400"}`}>최대 {q.maxChoices}개까지 선택 가능 ({arr.length}/{q.maxChoices}) {arr.length > q.maxChoices ? "— 초과 선택됨" : atLimit ? "— 추가 선택 시 경고" : ""}</p>}
+                  {q.options?.map(opt=>{
+                const checked = arr.includes(opt);
+                const disabled = !checked && !!q.maxChoices && arr.length >= (q.maxChoices as number);
+                return <label key={opt} className={`flex items-center gap-2 text-sm ${disabled ? "opacity-50" : ""} dark:text-white`}><input type="checkbox" checked={checked} disabled={disabled} onChange={e=>{
+                  if (e.target.checked && q.maxChoices && arr.length >= (q.maxChoices as number)) {
+                    setStatus(`‘${q.title}’은(는) 최대 ${q.maxChoices}개까지 선택 가능합니다.`);
+                    return;
+                  }
+                  const next = e.target.checked ? [...arr, opt] : arr.filter(x=>x!==opt);
+                  setStatus("");
+                  setAns(q.id, next);
+                }} />{opt}</label>;
+              })}</div>
+              );})()}
            </div>
          ))}
         <div className="flex gap-3">
