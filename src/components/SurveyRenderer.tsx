@@ -96,23 +96,34 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
       return text.split("\n").map((line, li) => {
         const trimmed = line.trim();
         if (!trimmed) return <div key={li} className="h-2" />;
-        // **bold** 처리 + : 앞 볼드
         const parts = line.split(/(\*\*.*?\*\*)/g);
-        const nodes = parts.map((p, i) => {
-          if (p.startsWith("**") && p.endsWith("**")) return <strong key={i} className="font-semibold text-zinc-900 dark:text-white">{p.slice(2, -2)}</strong>;
-          // : 앞 글자 볼드 (예: 평가 척도: , 소요 시간: )
+        const nodes: React.ReactNode[] = (parts as string[]).flatMap((p: string, i: number): React.ReactNode[] => {
+          if (p.startsWith("**") && p.endsWith("**")) return [<strong key={`${i}-b`} className="font-semibold text-zinc-900 dark:text-white">{p.slice(2, -2)}</strong>];
+          if (p.match(/^\[.*\]$/)) return [<strong key={`${i}-br`} className="font-semibold text-zinc-900 dark:text-white">{p}</strong>];
           if (p.includes(":")) {
-            const idx = p.indexOf(":");
-            const before = p.slice(0, idx).trim();
-            const after = p.slice(idx);
-            // [] 안쪽은 이미 위에서 처리, 여기서는 일반 : 처리 — before가 2글자 이상이면 볼드
-            if (before.length >= 2 && before.length <= 20 && !p.trim().startsWith("http")) {
-              return <span key={i}><strong className="font-semibold text-zinc-900 dark:text-white">{before}</strong>{after}</span>;
+            const segs: React.ReactNode[] = [];
+            let rest: string = p;
+            let si = 0;
+            while (rest.includes(":")) {
+              const idx = rest.indexOf(":");
+              const before: string = rest.slice(0, idx);
+              const afterColon: string = rest.slice(idx + 1);
+              const beforeTrim = before.trimEnd();
+              const lastSep = Math.max(beforeTrim.lastIndexOf(" "), beforeTrim.lastIndexOf("~"), beforeTrim.lastIndexOf("("));
+              const prefix = lastSep >= 0 ? beforeTrim.slice(lastSep + 1).trim() : beforeTrim.trim();
+              const head = lastSep >= 0 ? before.slice(0, lastSep + 1) : "";
+              if (prefix.length >= 1 && prefix.length <= 10 && !prefix.includes("http") && !prefix.includes("//")) {
+                segs.push(<span key={`${i}-${si++}`}>{head}<strong className="font-semibold text-zinc-900 dark:text-white">{prefix}</strong>:</span>);
+              } else {
+                segs.push(<span key={`${i}-${si++}`}>{before}:</span>);
+              }
+              rest = afterColon;
+              if (rest === "") break;
             }
+            if (rest) segs.push(<span key={`${i}-${si++}`}>{rest}</span>);
+            return segs as React.ReactNode[];
           }
-          // [응답 안내] 같은 대괄호 안쪽 볼드
-          if (p.match(/^\[.*\]$/)) return <strong key={i} className="font-semibold text-zinc-900 dark:text-white">{p}</strong>;
-          return <span key={i}>{p}</span>;
+          return [<span key={i}>{p}</span>];
         });
         return <div key={li}>{nodes}</div>;
       });
@@ -233,26 +244,26 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
              {q.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{q.description}</p>}
              {q.type==="TEXT" && <input value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" placeholder="단답형" />}
              {q.type==="PARAGRAPH_TEXT" && <textarea value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" rows={4} placeholder="장문형" />}
-             {q.type==="RADIO" && q.rawType==="SCALE" && (
-               <div className="mt-3 overflow-x-auto">
-                 <div className="min-w-[420px] border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
-                   <div className="grid" style={{gridTemplateColumns:`80px repeat(${q.options?.length||7},1fr) 80px`}}>
-                     <div className="text-[11px] text-zinc-400 p-2"></div>
-                     {(q.options||[]).map(o=><div key={o} className="text-center text-xs font-medium text-zinc-700 dark:text-zinc-300 p-2">{o}</div>)}
-                     <div className="text-[11px] text-zinc-400 p-2"></div>
-                   </div>
-                   <div className="grid border-t dark:border-zinc-700" style={{gridTemplateColumns:`80px repeat(${q.options?.length||7},1fr) 80px`}}>
-                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2 text-right pr-1">{q.scaleLowLabel || "전혀 그렇지 않다"}</div>
-                     {(q.options||[]).map(o=>(
-                       <label key={o} className="flex justify-center items-center p-2">
-                         <input type="radio" name={q.id} checked={answers[q.id]===o} onChange={()=>setAns(q.id,o)} required={q.required} className="accent-zinc-900" />
-                       </label>
-                     ))}
-                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2">{q.scaleHighLabel || "매우 그렇다"}</div>
-                   </div>
-                 </div>
-               </div>
-             )}
+              {q.type==="RADIO" && q.rawType==="SCALE" && (
+                <div className="mt-3 overflow-x-auto">
+                  <div className="min-w-[560px] border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                    <div className="grid" style={{gridTemplateColumns:`110px repeat(${q.options?.length||7},1fr) 110px`}}>
+                      <div className="text-[11px] text-zinc-400 p-2"></div>
+                      {(q.options||[]).map(o=><div key={o} className="text-center text-xs font-medium text-zinc-700 dark:text-zinc-300 p-2">{o}</div>)}
+                      <div className="text-[11px] text-zinc-400 p-2"></div>
+                    </div>
+                    <div className="grid border-t dark:border-zinc-700" style={{gridTemplateColumns:`110px repeat(${q.options?.length||7},1fr) 110px`}}>
+                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2 text-right pr-1 break-keep whitespace-nowrap">{q.scaleLowLabel || "전혀 그렇지 않다"}</div>
+                      {(q.options||[]).map(o=>(
+                        <label key={o} className="flex justify-center items-center p-2">
+                          <input type="radio" name={q.id} checked={answers[q.id]===o} onChange={()=>setAns(q.id,o)} required={q.required} className="accent-zinc-900" />
+                        </label>
+                      ))}
+                      <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2 break-keep whitespace-nowrap">{q.scaleHighLabel || "매우 그렇다"}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
              {q.type==="RADIO" && q.rawType!=="SCALE" && <div className="mt-2 space-y-2">{q.options?.map(opt=>(
                <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="radio" name={q.id} checked={answers[q.id]===opt} onChange={()=>setAns(q.id,opt)} required={q.required} />{opt}</label>
              ))}</div>}
