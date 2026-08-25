@@ -18,6 +18,7 @@ export type ParsedForm = {
   description?: string;
   questions: ParsedQuestion[];
   unsupported: ParsedQuestion[];
+  sectionBreaks?: number[];
 };
 
 const SUPPORTED_MAP: Record<string, ParsedQuestion["type"]> = {
@@ -40,16 +41,22 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
 
   const questions: ParsedQuestion[] = [];
   const unsupported: ParsedQuestion[] = [];
+  const sectionBreaks: number[] = [];
 
   if (!items || items.length === 0) {
-    return { formId, title, description, questions, unsupported };
+    return { formId, title, description, questions, unsupported, sectionBreaks };
   }
 
   for (const raw of items as Record<string, unknown>[]) {
+    // 섹션 구분 (pageBreak) — 페이지네이션 우선 기준
+    if ((raw as Record<string, unknown>).pageBreakItem !== undefined) {
+      if (questions.length > 0) sectionBreaks.push(questions.length);
+      continue;
+    }
     const questionItem = (raw.questionItem || raw.questionGroupItem || raw) as Record<string, unknown>;
     const question = questionItem.question as Record<string, unknown> | undefined;
     if (!question) {
-      // pageBreak, image, etc. -> unsupported
+      // image, video 등 -> unsupported
       const titleText = (raw.title as string) || "지원되지 않는 항목";
       const q: ParsedQuestion = { id: String(raw.itemId || Math.random()), title: titleText, type: "UNSUPPORTED", required: false, rawType: String(raw.kind || "UNKNOWN") };
       unsupported.push(q);
@@ -114,7 +121,7 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
     else questions.push(parsed);
   }
 
-  return { formId, title, description, questions, unsupported };
+  return { formId, title, description, questions, unsupported, sectionBreaks };
 }
 
 export function mockForm(formId: string): ParsedForm {

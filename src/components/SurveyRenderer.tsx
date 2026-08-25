@@ -16,10 +16,11 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string>("");
   const [done, setDone] = useState<{ presetLabel: string; presetBody: string } | null>(null);
+  const [page, setPage] = useState(0);
 
   useEffect(()=>{
     fetch(`/api/forms/${surveyId}`).then(r=>r.json()).then(j=>{
-      if (j.form) setForm(j.form);
+      if (j.form) { setForm(j.form); setPage(0); }
       if (j.warning) setStatus(j.warning);
     }).catch(()=>setStatus("폼 로드 실패"));
     // taxonomy meta
@@ -76,33 +77,94 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     setStatus("");
   }
 
-  if (done) {
-     return (
-       <div className="mx-auto max-w-xl px-6 py-16 text-center">
-         <div className="border dark:border-zinc-800 rounded-2xl p-8 bg-white dark:bg-zinc-900">
-           <h2 className="text-xl font-bold dark:text-white">{done.presetLabel}</h2>
-           <p className="mt-2 text-zinc-600 dark:text-zinc-300">{done.presetBody}</p>
-           <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">확인 메일이 발송되었습니다. (Resend 키 없을 시 스킵)</p>
-           <Link href="/" className="inline-block mt-6 text-sm border dark:border-zinc-700 rounded-full px-5 py-2 dark:text-white">홈으로</Link>
-         </div>
-       </div>
-     );
-   }
+   if (done) {
+      return (
+        <div className="mx-auto max-w-[1280px] w-full px-6 py-16 text-center">
+          <div className="border dark:border-zinc-800 rounded-2xl p-8 bg-white dark:bg-zinc-900">
+            <h2 className="text-xl font-bold dark:text-white">{done.presetLabel}</h2>
+            <p className="mt-2 text-zinc-600 dark:text-zinc-300">{done.presetBody}</p>
+            <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-400">확인 메일이 발송되었습니다. (Resend 키 없을 시 스킵)</p>
+            <Link href="/" className="inline-block mt-6 text-sm border dark:border-zinc-700 rounded-full px-5 py-2 dark:text-white">홈으로</Link>
+          </div>
+        </div>
+      );
+    }
 
-    if (!form) return <div className="mx-auto max-w-xl px-6 py-16 text-center text-zinc-500 dark:text-zinc-400">설문 로딩 중…</div>;
+    if (!form) return <div className="mx-auto max-w-[1280px] w-full px-6 py-16 text-center text-zinc-500 dark:text-zinc-400">설문 로딩 중…</div>;
 
     function renderDesc(text: string) {
-      const parts = text.split(/(\*\*.*?\*\*)/g);
-      return parts.map((p, i) => {
-        if (p.startsWith("**") && p.endsWith("**")) return <strong key={i} className="font-semibold text-zinc-900 dark:text-white">{p.slice(2, -2)}</strong>;
-        return <span key={i}>{p}</span>;
+      return text.split("\n").map((line, li) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={li} className="h-2" />;
+        // **bold** 처리 + : 앞 볼드
+        const parts = line.split(/(\*\*.*?\*\*)/g);
+        const nodes = parts.map((p, i) => {
+          if (p.startsWith("**") && p.endsWith("**")) return <strong key={i} className="font-semibold text-zinc-900 dark:text-white">{p.slice(2, -2)}</strong>;
+          // : 앞 글자 볼드 (예: 평가 척도: , 소요 시간: )
+          if (p.includes(":")) {
+            const idx = p.indexOf(":");
+            const before = p.slice(0, idx).trim();
+            const after = p.slice(idx);
+            // [] 안쪽은 이미 위에서 처리, 여기서는 일반 : 처리 — before가 2글자 이상이면 볼드
+            if (before.length >= 2 && before.length <= 20 && !p.trim().startsWith("http")) {
+              return <span key={i}><strong className="font-semibold text-zinc-900 dark:text-white">{before}</strong>{after}</span>;
+            }
+          }
+          // [응답 안내] 같은 대괄호 안쪽 볼드
+          if (p.match(/^\[.*\]$/)) return <strong key={i} className="font-semibold text-zinc-900 dark:text-white">{p}</strong>;
+          return <span key={i}>{p}</span>;
+        });
+        return <div key={li}>{nodes}</div>;
       });
     }
 
-     return (
-       <div className="mx-auto max-w-xl px-6 py-8">
+  // 페이지네이션: 섹션이 있으면 섹션 우선, 없으면 5문항씩
+  const pages: ParsedForm["questions"][] = (() => {
+    if (!form) return [];
+    const breaks = (form as ParsedForm).sectionBreaks;
+    if (breaks && breaks.length > 0) {
+      const points = [0, ...breaks, form.questions.length];
+      return points.slice(0, -1).map((s, i) => form.questions.slice(s, points[i + 1]));
+    }
+    const chunk = 5;
+    const res: ParsedForm["questions"][] = [];
+    for (let i = 0; i < form.questions.length; i += chunk) res.push(form.questions.slice(i, i + chunk));
+    return res.length ? res : [form.questions];
+  })();
+  const currentQuestions = pages[page] || [];
+  const isLastPage = page === pages.length - 1;
+  const totalPages = pages.length;
+
+  function handleNext() {
+    for (const q of currentQuestions) {
+      const v = answers[q.id];
+      if (q.required) {
+        if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) {
+          setStatus(`필수 문항을 입력하세요: ${q.title}`);
+          return;
+        }
+      }
+    }
+    if (page === 0) {
+      const t = checkEmailTypo(email);
+      if (email && t && !t.ok) { setStatus(`이메일 오타: ${t.reason}`); return; }
+      const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
+      if (taxErr) { setStatus(`분류 오류: ${taxErr}`); return; }
+    }
+    setStatus("");
+    setPage(p => Math.min(p + 1, totalPages - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  function handlePrev() {
+    setStatus("");
+    setPage(p => Math.max(p - 1, 0));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+      return (
+       <div className="mx-auto max-w-[1280px] w-full px-6 py-8">
          <h1 className="text-2xl font-bold dark:text-white">{form.title}</h1>
-         {form.description && <div className="text-sm text-zinc-600 dark:text-zinc-300 mt-2 whitespace-pre-wrap leading-relaxed">{renderDesc(form.description)}</div>}
+         {form.description && <div className="text-sm text-zinc-600 dark:text-zinc-300 mt-2 whitespace-pre-wrap leading-relaxed space-y-1">{renderDesc(form.description)}</div>}
         {form.unsupported.length>0 && (
           <div className="mt-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-sm text-amber-800 dark:text-amber-200">
             ⚠️ 지원되지 않는 문항 {form.unsupported.length}개가 있어 표시하지 않았습니다.
@@ -158,47 +220,56 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
              </label>
            );
          })}
-         {taxonomyFields.length>0 && <p className="text-[11px] text-zinc-500 dark:text-zinc-400">분류: {taxonomyFields.map(f=>`${f.label}(${f.key})`).join(", ")} — 숨김 필드는 URL로 자동 기록됩니다.</p>}
-        {form.questions.map(q=>(
-          <div key={q.id} className="border-t pt-4 first:border-0 first:pt-0">
-            <label className="text-sm font-medium dark:text-white">{q.title} {q.required && <span className="text-red-500">*</span>}</label>
-            {q.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{q.description}</p>}
-            {q.type==="TEXT" && <input value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" placeholder="단답형" />}
-            {q.type==="PARAGRAPH_TEXT" && <textarea value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" rows={4} placeholder="장문형" />}
-            {q.type==="RADIO" && q.rawType==="SCALE" && (
-              <div className="mt-3 overflow-x-auto">
-                <div className="min-w-[420px] border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
-                  <div className="grid" style={{gridTemplateColumns:`80px repeat(${q.options?.length||7},1fr) 80px`}}>
-                    <div className="text-[11px] text-zinc-400 p-2"></div>
-                    {(q.options||[]).map(o=><div key={o} className="text-center text-xs font-medium text-zinc-700 dark:text-zinc-300 p-2">{o}</div>)}
-                    <div className="text-[11px] text-zinc-400 p-2"></div>
-                  </div>
-                  <div className="grid border-t dark:border-zinc-700" style={{gridTemplateColumns:`80px repeat(${q.options?.length||7},1fr) 80px`}}>
-                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2 text-right pr-1">{q.scaleLowLabel || "전혀 그렇지 않다"}</div>
-                    {(q.options||[]).map(o=>(
-                      <label key={o} className="flex justify-center items-center p-2">
-                        <input type="radio" name={q.id} checked={answers[q.id]===o} onChange={()=>setAns(q.id,o)} required={q.required} className="accent-zinc-900" />
-                      </label>
-                    ))}
-                    <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2">{q.scaleHighLabel || "매우 그렇다"}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {q.type==="RADIO" && q.rawType!=="SCALE" && <div className="mt-2 space-y-2">{q.options?.map(opt=>(
-              <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="radio" name={q.id} checked={answers[q.id]===opt} onChange={()=>setAns(q.id,opt)} required={q.required} />{opt}</label>
-            ))}</div>}
-            {q.type==="CHECKBOX" && <div className="mt-2 space-y-2">{q.options?.map(opt=>{
-              const arr = (answers[q.id] as string[])||[];
-              const checked = arr.includes(opt);
-              return <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="checkbox" checked={checked} onChange={e=>{
-                const next = e.target.checked ? [...arr, opt] : arr.filter(x=>x!==opt);
-                setAns(q.id, next);
-              }} />{opt}</label>;
-            })}</div>}
+          {taxonomyFields.length>0 && <p className="text-[11px] text-zinc-500 dark:text-zinc-400">분류: {taxonomyFields.map(f=>`${f.label}(${f.key})`).join(", ")} — 숨김 필드는 URL로 자동 기록됩니다.</p>}
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-full px-3 py-1">
+            <span>페이지 {page + 1} / {totalPages}</span>
+            <span>{form.questions.length}문항</span>
           </div>
-        ))}
-        <button type="submit" className="w-full rounded-full bg-black dark:bg-white dark:text-black text-white dark:text-black py-3 text-sm font-medium">제출하기</button>
+        )}
+         {currentQuestions.map(q=>(
+           <div key={q.id} className="border-t pt-4 first:border-0 first:pt-0">
+             <label className="text-sm font-medium dark:text-white">{q.title} {q.required && <span className="text-red-500">*</span>}</label>
+             {q.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{q.description}</p>}
+             {q.type==="TEXT" && <input value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" placeholder="단답형" />}
+             {q.type==="PARAGRAPH_TEXT" && <textarea value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" rows={4} placeholder="장문형" />}
+             {q.type==="RADIO" && q.rawType==="SCALE" && (
+               <div className="mt-3 overflow-x-auto">
+                 <div className="min-w-[420px] border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+                   <div className="grid" style={{gridTemplateColumns:`80px repeat(${q.options?.length||7},1fr) 80px`}}>
+                     <div className="text-[11px] text-zinc-400 p-2"></div>
+                     {(q.options||[]).map(o=><div key={o} className="text-center text-xs font-medium text-zinc-700 dark:text-zinc-300 p-2">{o}</div>)}
+                     <div className="text-[11px] text-zinc-400 p-2"></div>
+                   </div>
+                   <div className="grid border-t dark:border-zinc-700" style={{gridTemplateColumns:`80px repeat(${q.options?.length||7},1fr) 80px`}}>
+                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2 text-right pr-1">{q.scaleLowLabel || "전혀 그렇지 않다"}</div>
+                     {(q.options||[]).map(o=>(
+                       <label key={o} className="flex justify-center items-center p-2">
+                         <input type="radio" name={q.id} checked={answers[q.id]===o} onChange={()=>setAns(q.id,o)} required={q.required} className="accent-zinc-900" />
+                       </label>
+                     ))}
+                     <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2">{q.scaleHighLabel || "매우 그렇다"}</div>
+                   </div>
+                 </div>
+               </div>
+             )}
+             {q.type==="RADIO" && q.rawType!=="SCALE" && <div className="mt-2 space-y-2">{q.options?.map(opt=>(
+               <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="radio" name={q.id} checked={answers[q.id]===opt} onChange={()=>setAns(q.id,opt)} required={q.required} />{opt}</label>
+             ))}</div>}
+             {q.type==="CHECKBOX" && <div className="mt-2 space-y-2">{q.options?.map(opt=>{
+               const arr = (answers[q.id] as string[])||[];
+               const checked = arr.includes(opt);
+               return <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="checkbox" checked={checked} onChange={e=>{
+                 const next = e.target.checked ? [...arr, opt] : arr.filter(x=>x!==opt);
+                 setAns(q.id, next);
+               }} />{opt}</label>;
+             })}</div>}
+           </div>
+         ))}
+        <div className="flex gap-3">
+          {page > 0 && <button type="button" onClick={handlePrev} className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 py-3 text-sm font-medium dark:text-white">이전</button>}
+          {!isLastPage ? <button type="button" onClick={handleNext} className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium">다음</button> : <button type="submit" className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium">제출하기</button>}
+        </div>
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center">제출 시 Supabase 기간/중복 검증 → 분류 검증 → GAS write(분류 포함) → Resend 확인 메일 즉시 발송</p>
       </form>
     </div>
