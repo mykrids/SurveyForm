@@ -29,8 +29,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const client = await auth.getClient();
     // Forms API v1
     const url = `https://forms.googleapis.com/v1/forms/${id}`;
-    const token = await (client as unknown as { getAccessToken: () => Promise<{ token?: string }> }).getAccessToken();
-    const accessToken = (token as unknown as string) || (token as { token?: string })?.token;
+    const tokenRes = await (client as unknown as { getAccessToken: () => Promise<unknown> }).getAccessToken() as unknown;
+    const accessToken = typeof tokenRes === "string" ? tokenRes : (tokenRes as { token?: string } | null)?.token || (tokenRes as string | null) as string | null;
+    if (!accessToken) throw new Error("AccessToken 획득 실패");
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) {
       const t = await res.text();
