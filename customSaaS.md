@@ -8,7 +8,7 @@
 ## PART 1. AI 코딩 툴에 전달할 지시어
 
 ### [역할 지정]
-너는 풀스택 웹 개발자야. Next.js 기반으로, 모아폼(moaform.com) 스타일의 랜딩 페이지를 갖추고
+너는 풀스택 웹 개발자야. Next.js 기반으로, krids 스타일의 랜딩 페이지를 갖추고
 Google Forms / Google Apps Script(GAS) / Google Sheets와 연동되는 커스텀 설문조사 SaaS
 플랫폼을 구축해 줘. 아래 아키텍처와 제약사항을 반드시 그대로 따라야 해.
 

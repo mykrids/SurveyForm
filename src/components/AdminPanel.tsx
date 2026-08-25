@@ -107,10 +107,10 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             <p className="text-zinc-500 dark:text-zinc-500 mt-1">→ 응답 5만건 이상 시 Supabase Pro 요금제 신청 (대시보드 &gt; Billing)</p>
           </div>
           <div className="border dark:border-zinc-800 rounded-xl p-3 bg-white dark:bg-zinc-950">
-            <p className="font-semibold text-zinc-900 dark:text-white">Google 서비스 계정 <span className="text-zinc-500 font-normal">(항상 동일)</span></p>
+            <p className="font-semibold text-zinc-900 dark:text-white">krids 서비스 계정 <span className="text-zinc-500 font-normal">(항상 동일)</span></p>
             <p className="text-zinc-600 dark:text-zinc-400 break-all">{CURRENT_VALUES.serviceAccount}</p>
             <p className="text-zinc-600 dark:text-zinc-400">프로젝트: {CURRENT_VALUES.serviceProject}</p>
-            <p className="text-zinc-500 dark:text-zinc-500 mt-1">→ 모든 구글폼에 이 이메일을 ‘뷰어’로 공유해야 함</p>
+            <p className="text-zinc-500 dark:text-zinc-500 mt-1">→ 모든 구글폼에 이 krids 서비스 계정을 ‘뷰어’로 공유해야 함</p>
           </div>
           <div className="border dark:border-zinc-800 rounded-xl p-3 bg-white dark:bg-zinc-950">
             <p className="font-semibold text-zinc-900 dark:text-white">GAS Web App <span className="text-amber-600 dark:text-amber-400 font-normal">(시트 생성 시 갱신)</span></p>
@@ -236,7 +236,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           <summary className="font-semibold text-zinc-900 dark:text-white cursor-pointer">1️⃣ 설문 생성 — 구글폼을 먼저 만들어야 하나요? (네, 그렇습니다)</summary>
           <ol className="mt-4 list-decimal list-inside space-y-2 text-sm text-zinc-700 dark:text-zinc-300 leading-relaxed">
             <li><b>구글폼에서 설문지 먼저 생성:</b> drive.google.com → 새로 만들기 → Google Forms → 제목/문항 작성 (단답형·장문형·객관식·체크박스 모두 지원).</li>
-            <li><b>서비스 계정에 뷰어 공유:</b> 폼 편집 화면 우측 상단 ‘공유’ → <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">survey-form@velvety-maker-506214-u5.iam.gserviceaccount.com</code> 에 뷰어 권한 추가 (안 하면 API가 폼을 읽지 못함).</li>
+            <li><b>krids 서비스 계정에 뷰어 공유:</b> 폼 편집 화면 우측 상단 ‘공유’ → <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">survey-form@velvety-maker-506214-u5.iam.gserviceaccount.com</code> 에 뷰어 권한 추가 (안 하면 API가 폼을 읽지 못함).</li>
             <li><b>Form ID 복사:</b> 폼 URL이 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">https://docs.google.com/forms/d/1FAIpQLSd…/edit</code> 일 때 <b>1FAIpQLSd…</b> 부분이 ID — 관리자 패널의 ‘Google Form ID’ 칸에 붙여넣기 (시트 생성 시 갱신).</li>
             <li><b>시트 연결:</b> 폼 → 응답 탭 → 스프레드시트 연결(새 시트 생성) → 해당 시트에서 확장 프로그램 → Apps Script → <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">gas/Code.gs</code> 붙여넣기 → Script Properties에 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">SHARED_SECRET=2afea94…</code> 등록 → 웹앱으로 배포(액세스: Anyone) → URL을 ‘GAS Web App URL’ 칸에 붙여넣기 (시트 생성 시 갱신).</li>
             <li><b>관리자 패널에서 저장:</b> 설문 제목·기간·GAS URL·관리자 이메일 입력 후 ‘설문 저장’ — 아래 목록에 링크가 생기면 완료.</li>
@@ -277,7 +277,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           <h3 className="font-semibold text-zinc-900 dark:text-white">💡 빠른 체크리스트</h3>
           <ul className="mt-3 space-y-1 text-sm text-zinc-700 dark:text-zinc-300 list-disc list-inside">
             <li>새 시트 만들 때마다 갱신: <b>설문 제목, Google Form ID, 시작/종료 일시, GAS Web App URL</b></li>
-            <li>항상 동일 (변경 불필요): <b>관리자 이메일(krids.org@gmail.com), Supabase, Resend, 서비스계정, GitHub, Vercel Cron</b></li>
+            <li>항상 동일 (변경 불필요): <b>관리자 이메일(krids.org@gmail.com), Supabase, Resend, krids 서비스계정, GitHub, Vercel Cron</b></li>
             <li>요금제: 응답 수가 늘면 Supabase(대시보드 &gt; Billing), Resend(발송량), Vercel(사용량)에서 각각 Pro 신청 — 코드 수정 불필요</li>
           </ul>
         </div>

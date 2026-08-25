@@ -10,7 +10,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // If no service account, return mock with warning
   if (!serviceJson) {
     const form = mockForm(id);
-    return NextResponse.json({ form, warning: "GOOGLE_SERVICE_ACCOUNT_JSON 미설정 — 목업 폼 반환. customSaaS.md PART 2-1) 참고해 서비스계정 발급 후 Form을 뷰어 공유하세요." });
+    return NextResponse.json({ form, warning: "GOOGLE_SERVICE_ACCOUNT_JSON 미설정 — 목업 폼 반환. customSaaS.md PART 2-1) 참고해 krids 서비스계정 발급 후 Form을 뷰어 공유하세요." });
   }
 
   try {
@@ -36,7 +36,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       const t = await res.text();
       // fallback to mock with error detail
       const form = mockForm(id);
-      return NextResponse.json({ form, warning: `Forms API 오류 ${res.status}: ${t} — 목업으로 대체. 서비스계정 이메일을 Form에 뷰어로 공유했는지 확인하세요.`, error: t });
+      return NextResponse.json({ form, warning: `Forms API 오류 ${res.status}: ${t} — 목업으로 대체. krids 서비스계정 이메일을 Form에 뷰어로 공유했는지 확인하세요.`, error: t });
     }
     const json = await res.json();
     const parsed = parseGoogleFormResponse(id, json);

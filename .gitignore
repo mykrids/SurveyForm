@@ -23,8 +23,9 @@
 # misc
 .DS_Store
 *.pem
-# google service account
+# google service account - krids 서비스 계정
 *service_account*.json
+*krids*.json
 velvety-maker-*.json
 *-a798b82e2e17.json
 
