@@ -44,7 +44,7 @@ export const LANDING_DATA = {
   templates: [
     { id: "t1", title: "고객 만족도 조사", category: "CSAT", questions: 8, color: "bg-violet-500" },
     { id: "t2", title: "강의 평가", category: "Education", questions: 12, color: "bg-blue-500" },
-    { id: "t3", title: "이벤트 참가 신청", category: "Event", questions: 6, color: "bg-emerald-500" },
+    { id: "t3", title: "대학 행사· 이벤트", category: "Event", questions: 6, color: "bg-emerald-500" },
     { id: "t4", title: "대학생활과 수업 만족도 조사", category: "Education", questions: 10, color: "bg-orange-500" },
     { id: "t5", title: "교육 과정 평가", category: "Education", questions: 9, color: "bg-pink-500" },
     { id: "t6", title: "교육 신청서", category: "Education", questions: 15, color: "bg-cyan-500" },
