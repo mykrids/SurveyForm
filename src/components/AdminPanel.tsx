@@ -233,7 +233,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           { id: "edit", label: "② 설문 편집", desc: "필수·검증·분기" },
           { id: "list", label: "③ 등록 목록", desc: `(${surveys.length})` },
         ].map(t=>(
-          <button key={t.id} onClick={()=>setActiveTab(t.id as Tab)} className={`px-5 py-2 rounded-full text-sm font-medium transition ${activeTab===t.id ? "bg-white dark:bg-zinc-900 shadow text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"}`}>
+          <button key={t.id} onClick={()=>setActiveTab(t.id as Tab)} className={`px-5 py-2 rounded-full text-sm font-medium transition ${activeTab===t.id ? "bg-white dark:bg-zinc-900 shadow text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-zinc-400 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950"}`}>
             {t.label} <span className="text-xs font-normal hidden md:inline">{t.desc}</span>
           </button>
         ))}
