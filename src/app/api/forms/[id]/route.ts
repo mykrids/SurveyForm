@@ -62,6 +62,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const json = await res.json();
     const parsed = parseGoogleFormResponse(formId, json);
     const warning = parsed.unsupported.length > 0 ? `지원되지 않는 문항 유형이 포함되어 있습니다: ${parsed.unsupported.map(u=>`${u.title}(${u.rawType})`).join(", ")}` : undefined;
+    // question_overrides는 /api/surveys/[id]에서 가져오므로 여기서는 raw만 반환, merge는 클라이언트에서 수행
     return NextResponse.json({ form: parsed, raw: json, warning });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

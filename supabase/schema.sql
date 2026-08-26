@@ -13,6 +13,7 @@ create table if not exists surveys (
   report_sent boolean not null default false,
   report_sent_at timestamptz,
   taxonomy_fields jsonb not null default '[]'::jsonb,
+  question_overrides jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 

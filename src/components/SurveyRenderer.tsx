@@ -6,6 +6,7 @@ import type { ParsedForm } from "@/lib/forms";
 import { checkEmailTypo } from "@/lib/emailTypo";
 import type { TaxonomyField } from "@/lib/taxonomy";
 import { validateTaxonomyValues } from "@/lib/taxonomy";
+import { ensureDefaults, validateAnswers, getNextPageIndex, type QuestionOverrides } from "@/lib/questionConfig";
 
 export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const searchParams = useSearchParams();
@@ -13,23 +14,25 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [taxonomyFields, setTaxonomyFields] = useState<TaxonomyField[]>([]);
   const [taxonomyValues, setTaxonomyValues] = useState<Record<string, string>>({});
+  const [overrides, setOverrides] = useState<QuestionOverrides>({});
+  const [branchEnded, setBranchEnded] = useState(false);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string>("");
   const [done, setDone] = useState<{ presetLabel: string; presetBody: string } | null>(null);
   const [page, setPage] = useState(0);
+  const [visited, setVisited] = useState<Set<number>>(()=> new Set([0]));
 
   useEffect(()=>{
     fetch(`/api/forms/${surveyId}`).then(r=>r.json()).then(j=>{
       if (j.form) { setForm(j.form); setPage(0); }
       if (j.warning) setStatus(j.warning);
     }).catch(()=>setStatus("폼 로드 실패"));
-    // taxonomy meta
+    // taxonomy + question_overrides meta
     if (surveyId !== "demo") {
       fetch(`/api/surveys/${surveyId}`).then(r=>r.json()).then(j=>{
         if (j.survey?.taxonomy_fields) {
           const fields = j.survey.taxonomy_fields as TaxonomyField[];
           setTaxonomyFields(fields);
-          // URL에서 hidden 값 주입
           const init: Record<string, string> = {};
           for (const f of fields) {
             const v = searchParams.get(f.key);
@@ -37,6 +40,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
           }
           if (Object.keys(init).length>0) setTaxonomyValues(init);
         }
+        if (j.survey?.question_overrides) setOverrides(j.survey.question_overrides as QuestionOverrides);
       }).catch(()=>{});
     } else {
       const demoFields: TaxonomyField[] = [];
@@ -51,6 +55,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (branchEnded) { setStatus("분기 종료 상태에서는 제출할 수 없습니다. ‘이전’으로 돌아가거나 홈으로 이동하세요."); return; }
     if (emailTypo && !emailTypo.ok) {
       const sug = emailTypo.suggestion ? ` → ‘${emailTypo.suggestion}’(으)로 교정해 보세요.` : "";
       setStatus(`이메일 오타 차단: ${emailTypo.reason}${sug}`);
@@ -58,6 +63,28 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     }
     const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
     if (taxErr) { setStatus(`분류 오류: ${taxErr}`); return; }
+    // 문항 검증 (필수/검증 프리셋) — 방문한 페이지만 검증 (분기 스킵 문항은 제외)
+    if (form) {
+      const visitedIds = new Set<string>();
+      const breaks = (form as ParsedForm).sectionBreaks;
+      const allPages: ParsedForm["questions"][] = (() => {
+        if (breaks && breaks.length > 0) {
+          const points = [0, ...breaks, form.questions.length];
+          return points.slice(0, -1).map((s, i) => form.questions.slice(s, points[i + 1]));
+        }
+        const chunk = 5;
+        const res: ParsedForm["questions"][] = [];
+        for (let i = 0; i < form.questions.length; i += chunk) res.push(form.questions.slice(i, i + chunk));
+        return res.length ? res : [form.questions];
+      })();
+      for (const pIdx of visited) {
+        for (const qq of (allPages[pIdx] || [])) visitedIds.add(qq.id);
+      }
+      // 현재 페이지도 포함
+      for (const qq of currentQuestions) visitedIds.add(qq.id);
+      const qErr = validateAnswers(form.questions.map(q=>({ id:q.id, title:q.title, required:q.required, type:q.type })), answers, overrides, visitedIds);
+      if (qErr) { setStatus(qErr); return; }
+    }
     // 체크박스 최대 선택 수 검증 (구글폼 "최대 3개" 대응 — Forms API는 검증 규칙을 노출하지 않아 제목으로 유추)
     if (form) {
       for (const q of form.questions) {
@@ -159,14 +186,9 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const totalPages = pages.length;
 
   function handleNext() {
+    // 체크박스 최대 선택 수 먼저 (기존 로직 유지)
     for (const q of currentQuestions) {
       const v = answers[q.id];
-      if (q.required) {
-        if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) {
-          setStatus(`필수 문항을 입력하세요: ${q.title}`);
-          return;
-        }
-      }
       if (q.type === "CHECKBOX" && q.maxChoices) {
         const arr = (v as string[]) || [];
         if (arr.length > q.maxChoices) {
@@ -175,18 +197,38 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         }
       }
     }
+    // 문항 검증 (필수/검증 프리셋) — 현재 페이지 문항만
+    {
+      const qErr = validateAnswers(currentQuestions.map(q=>({ id:q.id, title:q.title, required:q.required, type:q.type })), answers, overrides);
+      if (qErr) { setStatus(qErr); return; }
+    }
     if (page === 0) {
       const t = checkEmailTypo(email);
       if (email && t && !t.ok) { setStatus(`이메일 오타: ${t.reason}`); return; }
       const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
       if (taxErr) { setStatus(`분류 오류: ${taxErr}`); return; }
     }
+    // 조건부 분기
+    const next = getNextPageIndex(page, totalPages, currentQuestions.map(q=>({ id: q.id })), answers, overrides);
+    if (next === "END") {
+      setBranchEnded(true);
+      setStatus("선택하신 응답에 따라 설문이 종료되었습니다. 제출하지 않고 종료하려면 홈으로 이동하세요 — 제출하려면 마지막 페이지로 이동해 제출하세요.");
+      return;
+    }
     setStatus("");
-    setPage(p => Math.min(p + 1, totalPages - 1));
+    setBranchEnded(false);
+    const target = typeof next === "number" ? next : page;
+    if (typeof next === "number" && next !== page + 1) {
+      setPage(next);
+      setVisited(v=> { const n=new Set(v); n.add(next); return n; });
+    } else {
+      setPage(p => { const n=Math.min(p + 1, totalPages - 1); setVisited(v=>{ const s=new Set(v); s.add(n); return s; }); return n; });
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function handlePrev() {
     setStatus("");
+    setBranchEnded(false);
     setPage(p => Math.max(p - 1, 0));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -257,12 +299,15 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
             <span>{form.questions.length}문항</span>
           </div>
         )}
-         {currentQuestions.map(q=>(
-           <div key={q.id} className="border-t pt-4 first:border-0 first:pt-0">
-             <label className="text-sm font-medium dark:text-white">{q.title} {q.required && <span className="text-red-500">*</span>}</label>
+          {currentQuestions.map(q=>{
+            const ovEff = ensureDefaults(overrides[q.id]);
+            const effReq = ovEff.required !== null ? !!ovEff.required : !!q.required;
+            return (
+            <div key={q.id} className="border-t pt-4 first:border-0 first:pt-0">
+              <label className="text-sm font-medium dark:text-white">{q.title} {effReq && <span className="text-red-500">*</span>}</label>
              {q.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{q.description}</p>}
-             {q.type==="TEXT" && <input value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" placeholder="단답형" />}
-             {q.type==="PARAGRAPH_TEXT" && <textarea value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={q.required} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" rows={4} placeholder="장문형" />}
+              {q.type==="TEXT" && (()=>{ const ovEff=ensureDefaults(overrides[q.id]); const effReq=ovEff.required!==null?!!ovEff.required:!!q.required; return <input value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={effReq} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" placeholder="단답형" />;})()}
+              {q.type==="PARAGRAPH_TEXT" && (()=>{ const ovEff=ensureDefaults(overrides[q.id]); const effReq=ovEff.required!==null?!!ovEff.required:!!q.required; return <textarea value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={effReq} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" rows={4} placeholder="장문형" />;})()}
               {q.type==="RADIO" && q.rawType==="SCALE" && (
                 <div className="mt-3 overflow-x-auto">
                   <div className="min-w-[560px] border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
@@ -273,19 +318,21 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
                     </div>
                     <div className="grid border-t dark:border-zinc-700" style={{gridTemplateColumns:`110px repeat(${q.options?.length||7},1fr) 110px`}}>
                       <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2 text-right pr-1 break-keep whitespace-nowrap">{q.scaleLowLabel || "전혀 그렇지 않다"}</div>
-                      {(q.options||[]).map(o=>(
+                       {(q.options||[]).map(o=>{
+                        const ovEffSc=ensureDefaults(overrides[q.id]); const effReqSc=ovEffSc.required!==null?!!ovEffSc.required:!!q.required;
+                        return (
                         <label key={o} className="flex justify-center items-center p-2">
-                          <input type="radio" name={q.id} checked={answers[q.id]===o} onChange={()=>setAns(q.id,o)} required={q.required} className="accent-zinc-900" />
+                          <input type="radio" name={q.id} checked={answers[q.id]===o} onChange={()=>setAns(q.id,o)} required={effReqSc} className="accent-zinc-900" />
                         </label>
-                      ))}
+                      );})}
                       <div className="text-[11px] text-zinc-600 dark:text-zinc-400 p-2 break-keep whitespace-nowrap">{q.scaleHighLabel || "매우 그렇다"}</div>
                     </div>
                   </div>
                 </div>
               )}
-             {q.type==="RADIO" && q.rawType!=="SCALE" && <div className="mt-2 space-y-2">{q.options?.map(opt=>(
-               <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="radio" name={q.id} checked={answers[q.id]===opt} onChange={()=>setAns(q.id,opt)} required={q.required} />{opt}</label>
-             ))}</div>}
+              {q.type==="RADIO" && q.rawType!=="SCALE" && (()=>{ const ovEff=ensureDefaults(overrides[q.id]); const effReq=ovEff.required!==null?!!ovEff.required:!!q.required; return <div className="mt-2 space-y-2">{q.options?.map(opt=>(
+                <label key={opt} className="flex items-center gap-2 text-sm dark:text-white"><input type="radio" name={q.id} checked={answers[q.id]===opt} onChange={()=>setAns(q.id,opt)} required={effReq} />{opt}</label>
+              ))}</div>;})()}
              {q.type==="CHECKBOX" && (()=>{ const arr = (answers[q.id] as string[])||[]; const atLimit = q.maxChoices ? arr.length >= q.maxChoices : false; return (
                 <div className="mt-2 space-y-2">
                   {q.maxChoices && <p className={`text-[11px] ${arr.length > q.maxChoices ? "text-red-600 dark:text-red-400" : "text-zinc-500 dark:text-zinc-400"}`}>최대 {q.maxChoices}개까지 선택 가능 ({arr.length}/{q.maxChoices}) {arr.length > q.maxChoices ? "— 초과 선택됨" : atLimit ? "— 추가 선택 시 경고" : ""}</p>}
@@ -302,9 +349,9 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
                   setAns(q.id, next);
                 }} />{opt}</label>;
               })}</div>
-              );})()}
-           </div>
-         ))}
+               );})()}
+            </div>
+          ); })}
         <div className="flex gap-3">
           {page > 0 && <button type="button" onClick={handlePrev} className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 py-3 text-sm font-medium dark:text-white">이전</button>}
           {!isLastPage ? <button type="button" onClick={handleNext} className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium">다음</button> : <button type="submit" className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium">제출하기</button>}

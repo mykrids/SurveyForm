@@ -4,6 +4,8 @@ import { DUPLICATE_CHECK_TYPES, END_MESSAGE_PRESETS } from "@/lib/constants";
 import { getDuplicateWarning } from "@/lib/duplicate";
 import { checkEmailTypo } from "@/lib/emailTypo";
 import { slugify, validateTaxonomyFields, type TaxonomyField } from "@/lib/taxonomy";
+import { PRESET_LABELS, defaultValidations, ensureDefaults, validateOverrides, type QuestionOverrides, type QuestionOverride, type ValidationRule } from "@/lib/questionConfig";
+import type { ParsedQuestion } from "@/lib/forms";
 
 type Survey = {
   id: string;
@@ -18,6 +20,7 @@ type Survey = {
   report_sent: boolean;
   form_id: string | null;
   taxonomy_fields?: TaxonomyField[];
+  question_overrides?: QuestionOverrides;
 };
 
 // 현재 시스템에 설정된 실제 값 ( .env 기준 ) — 테스트용 자동 입력 (비밀값은 마스킹)
@@ -38,7 +41,7 @@ const CURRENT_VALUES = {
 export default function AdminPanel({ role }: { role?: "administrator" | "supervisor" }) {
   const [surveys, setSurveys] = useState<Survey[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState<Partial<Survey> & { taxonomy_fields?: TaxonomyField[] }>({
+  const [form, setForm] = useState<Partial<Survey> & { taxonomy_fields?: TaxonomyField[]; question_overrides?: QuestionOverrides }>({
     title: "",
     form_id: "",
     start_at: "",
@@ -49,12 +52,17 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
     gas_webapp_url: CURRENT_VALUES.gasUrl,
     admin_email: CURRENT_VALUES.adminEmail,
     taxonomy_fields: [],
+    question_overrides: {},
   });
   const [msg, setMsg] = useState("");
   const [newTaxLabel, setNewTaxLabel] = useState("");
   const [newTaxType, setNewTaxType] = useState<"text"|"select">("text");
   const [newTaxHidden, setNewTaxHidden] = useState(false);
   const [newTaxOptions, setNewTaxOptions] = useState("");
+  // 설문 편집: 문항 목록
+  const [fetchedQuestions, setFetchedQuestions] = useState<ParsedQuestion[] | null>(null);
+  const [fetchStatus, setFetchStatus] = useState("");
+  const [sectionCount, setSectionCount] = useState(0);
 
   async function load() {
     setLoading(true);
@@ -86,7 +94,46 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
     setForm({ ...form, taxonomy_fields: (form.taxonomy_fields||[]).filter(f=>f.key!==key) });
   }
 
-  async function submit(e: React.FormEvent) {
+  async function fetchQuestions() {
+    const fid = form.form_id?.trim();
+    if (!fid) { setFetchStatus("Form ID를 먼저 입력하세요"); return; }
+    setFetchStatus("문항 불러오는 중…");
+    try {
+      const r = await fetch(`/api/forms/${fid}`);
+      const j = await r.json();
+      if (j.form?.questions) {
+        setFetchedQuestions(j.form.questions as ParsedQuestion[]);
+        setSectionCount((j.form.sectionBreaks?.length || 0) + 1);
+        // 초기 overrides에 구글 required 반영 (이미 있으면 유지)
+        const cur = form.question_overrides || {};
+        let added = 0;
+        for (const q of j.form.questions as ParsedQuestion[]) {
+          if (!cur[q.id]) {
+            cur[q.id] = { required: q.required ? true : null, validations: defaultValidations(), branchEnabled: false, branchMap: {} };
+            added++;
+          }
+        }
+        if (added > 0) setForm(f => ({ ...f, question_overrides: { ...cur } }));
+        setFetchStatus(`문항 ${j.form.questions.length}개 로드됨 — 편집 가능`);
+      } else setFetchStatus("문항을 찾을 수 없습니다");
+    } catch (e) {
+      setFetchStatus(`로드 실패: ${String(e)}`);
+    }
+  }
+  function updateOverride(qid: string, patch: Partial<QuestionOverride>) {
+    const cur = form.question_overrides || {};
+    const base = ensureDefaults(cur[qid]);
+    const next = { ...cur, [qid]: { ...base, ...patch } };
+    setForm({ ...form, question_overrides: next });
+  }
+  function updateValidation(qid: string, preset: string, patch: Partial<ValidationRule>) {
+    const cur = form.question_overrides || {};
+    const base = ensureDefaults(cur[qid]);
+    const vals = (base.validations || []).map(v => v.preset === preset ? { ...v, ...patch } : v);
+    updateOverride(qid, { validations: vals });
+  }
+
+   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (form.admin_email) {
       const typo = checkEmailTypo(form.admin_email);
@@ -99,13 +146,18 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
       const err = validateTaxonomyFields(form.taxonomy_fields);
       if (err) { setMsg(`오류: 분류 필드 검증 실패 — ${err}`); return; }
     }
+    if (form.question_overrides) {
+      const err = validateOverrides(form.question_overrides);
+      if (err) { setMsg(`오류: 문항 설정 오류 — ${err}`); return; }
+    }
     setMsg("저장 중…");
     const r = await fetch("/api/admin/surveys", { method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(form) });
     const j = await r.json();
     if (!r.ok) setMsg(`오류: ${j.error || r.status}`);
     else {
       setMsg("저장 완료 — 응답 페이지 링크가 아래 목록에 생성되었습니다.");
-      setForm({ title:"", form_id:"", start_at:"", end_at:"", report_delay_hours:1, duplicate_check_type:"none", end_message_preset:"1", gas_webapp_url: CURRENT_VALUES.gasUrl, admin_email: CURRENT_VALUES.adminEmail, taxonomy_fields: [] });
+      setForm({ title:"", form_id:"", start_at:"", end_at:"", report_delay_hours:1, duplicate_check_type:"none", end_message_preset:"1", gas_webapp_url: CURRENT_VALUES.gasUrl, admin_email: CURRENT_VALUES.adminEmail, taxonomy_fields: [], question_overrides: {} });
+      setFetchedQuestions(null); setFetchStatus("");
       load();
     }
   }
@@ -253,6 +305,80 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             <button type="button" onClick={addTaxonomy} className="md:col-span-1 rounded-full bg-zinc-900 dark:bg-white dark:text-black text-white px-4 py-2 text-xs font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200">추가</button>
           </div>
           <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">숨김=체크 시 <code className="bg-zinc-100 dark:bg-zinc-700 px-1 rounded">/s/{"{id}"}?{newTaxLabel?slugify(newTaxLabel):"key"}=값</code> 형태로 링크를 배포하면 응답자에게 보이지 않게 자동 기록. 노출=미체크 시 응답자가 직접 선택/입력.</p>
+        </div>
+        {/* 설문 편집 — 문항별 제어 (필수/검증/조건부 이동) */}
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 p-4">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">📝 설문 편집 <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">문항별 필수·검증·조건부 이동 — 전부 OFF가 기본, 필요 시 ON</span></h3>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">Google Form에서 만든 문항을 불러와, 각 문항에 검증(전화/이메일/날짜/URL 등)과 조건부 섹션 이동을 체크만으로 적용합니다. OFF면 현재 동작과 동일해 안전합니다.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={fetchQuestions} className="rounded-full bg-zinc-900 dark:bg-white dark:text-black text-white px-4 py-2 text-xs font-medium hover:bg-zinc-800">문항 불러오기</button>
+            {fetchStatus && <span className="text-xs text-zinc-600 dark:text-zinc-400 self-center">{fetchStatus}</span>}
+          </div>
+          {fetchedQuestions && fetchedQuestions.length>0 && (
+            <div className="mt-4 space-y-3">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">섹션 {sectionCount}개 — 페이지네이션은 섹션 우선, 없으면 5문항씩</p>
+              {fetchedQuestions.map((q, idx)=> {
+                const ov = ensureDefaults((form.question_overrides || {})[q.id]);
+                const isRequiredEffective = ov.required !== null ? !!ov.required : !!q.required;
+                return (
+                <div key={q.id} className="border dark:border-zinc-700 rounded-xl p-3 bg-white dark:bg-zinc-900">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-zinc-900 dark:text-white">{idx+1}. {q.title}</span>
+                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">{q.type}{q.rawType?`(${q.rawType})`:""}</span>
+                    {q.required && <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">Google 필수</span>}
+                    {isRequiredEffective && <span className="text-[11px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300">필수 적용</span>}
+                  </div>
+                  {q.options && q.options.length>0 && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">선택지: {q.options.join(", ")}</p>}
+                  <div className="mt-3 grid gap-3">
+                    <label className="flex items-center gap-2 text-xs dark:text-white">
+                      <input type="checkbox" checked={isRequiredEffective} onChange={e=>updateOverride(q.id,{ required: e.target.checked })} />
+                      필수 — 체크 시 반드시 입력해야 다음으로 이동 (개인정보 동의는 허용값과 함께 사용) <span className="text-zinc-500">OFF=Google 설정 유지</span>
+                    </label>
+                    <div className="border dark:border-zinc-700 rounded-lg p-2 bg-zinc-50 dark:bg-zinc-800">
+                      <p className="text-xs font-medium dark:text-white">검증 프리셋 — 필요한 것만 ON</p>
+                      <div className="mt-2 grid md:grid-cols-2 gap-2">
+                        {(ov.validations||[]).map(r=> (
+                          <div key={r.preset} className={`flex flex-col gap-1 border rounded-lg px-2 py-1.5 ${r.enabled?"bg-white dark:bg-zinc-900 border-blue-300 dark:border-blue-700":"bg-zinc-100 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 opacity-70"}`}>
+                            <label className="flex items-center gap-1.5 text-xs dark:text-white">
+                              <input type="checkbox" checked={!!r.enabled} onChange={e=>updateValidation(q.id, r.preset, { enabled: e.target.checked })} />
+                              {PRESET_LABELS[r.preset as keyof typeof PRESET_LABELS]}
+                            </label>
+                            {r.preset==="length" && r.enabled && <div className="flex gap-1"><input type="number" value={r.minLength??""} onChange={e=>updateValidation(q.id,"length",{ minLength: e.target.value?Number(e.target.value):undefined })} placeholder="min" className="w-16 border rounded px-1 py-0.5 text-xs" />~<input type="number" value={r.maxLength??""} onChange={e=>updateValidation(q.id,"length",{ maxLength: e.target.value?Number(e.target.value):undefined })} placeholder="max" className="w-16 border rounded px-1 py-0.5 text-xs" /></div>}
+                            {r.preset==="range" && r.enabled && <div className="flex gap-1"><input type="number" value={r.minValue??""} onChange={e=>updateValidation(q.id,"range",{ minValue: e.target.value?Number(e.target.value):undefined })} placeholder="min" className="w-16 border rounded px-1 py-0.5 text-xs" />~<input type="number" value={r.maxValue??""} onChange={e=>updateValidation(q.id,"range",{ maxValue: e.target.value?Number(e.target.value):undefined })} placeholder="max" className="w-16 border rounded px-1 py-0.5 text-xs" /></div>}
+                            {r.preset==="regex" && r.enabled && <input value={r.pattern||""} onChange={e=>updateValidation(q.id,"regex",{ pattern: e.target.value })} placeholder="정규식 (예: ^010-\\d{4}-\\d{4}$)" className="w-full border rounded px-1.5 py-1 text-xs" />}
+                            {r.preset==="allowedValues" && r.enabled && <input value={(r.allowedValues||[]).join(",")} onChange={e=>updateValidation(q.id,"allowedValues",{ allowedValues: e.target.value.split(",").map(s=>s.trim()).filter(Boolean) })} placeholder="허용값 콤마 구분 (예: 동의함)" className="w-full border rounded px-1.5 py-1 text-xs" />}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">개인정보 동의: 필수 ON + 허용값에 &apos;동의함&apos; 입력 시 미동의 상태에서 &apos;다음&apos;이 차단되어 머무름</p>
+                    </div>
+                    <div className="border dark:border-zinc-700 rounded-lg p-2 bg-zinc-50 dark:bg-zinc-800">
+                      <label className="flex items-center gap-2 text-xs font-medium dark:text-white"><input type="checkbox" checked={!!ov.branchEnabled} onChange={e=>updateOverride(q.id,{ branchEnabled: e.target.checked })} />조건부 이동 ON/OFF — 선택지 값에 따라 섹션 이동</label>
+                      {ov.branchEnabled && (
+                        <div className="mt-2 space-y-1">
+                          {(q.options||[]).length===0 && <p className="text-[11px] text-amber-600">선택지 문항(RADIO/CHECKBOX)에서만 동작합니다</p>}
+                          {(q.options||[]).map(opt=>(
+                            <div key={opt} className="flex items-center gap-2 text-xs">
+                              <span className="min-w-[80px] truncate dark:text-white">{opt}</span>
+                              <span className="text-zinc-500">→</span>
+                              <select value={String(ov.branchMap?.[opt] ?? "")} onChange={e=>{ const v=e.target.value; const map={...(ov.branchMap||{})}; if(v==="") delete map[opt]; else if(v==="END") map[opt]="END"; else map[opt]=Number(v); updateOverride(q.id,{ branchMap: map }); }} className="border rounded px-1.5 py-1 text-xs bg-white dark:bg-zinc-900 dark:text-white">
+                                <option value="">다음 섹션(기본)</option>
+                                <option value="END">종료(제출 차단 없이 건너뜀)</option>
+                                {Array.from({length: sectionCount}, (_,i)=> <option key={i} value={i}>섹션 {i+1}로 이동</option>)}
+                              </select>
+                            </div>
+                          ))}
+                          <p className="text-[11px] text-zinc-500">미지정 시 선형 다음 페이지로 진행</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          )}
+          {fetchedQuestions && fetchedQuestions.length===0 && <p className="text-xs text-zinc-500 mt-2">불러온 문항이 없습니다 — Form ID와 뷰어 공유를 확인하세요</p>}
         </div>
         {/* 중복 방지 응답자 안내 */}
         <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-3 text-xs leading-relaxed">

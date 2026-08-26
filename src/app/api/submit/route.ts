@@ -7,6 +7,8 @@ import { sendConfirmationEmail } from "@/lib/email";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
 import { checkEmailTypo } from "@/lib/emailTypo";
 import { validateTaxonomyValues, type TaxonomyField } from "@/lib/taxonomy";
+import { validateAnswers, validateOverrides, type QuestionOverrides } from "@/lib/questionConfig";
+import { parseGoogleFormResponse } from "@/lib/forms";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +62,46 @@ export async function POST(req: NextRequest) {
   const taxonomyFields = (survey.taxonomy_fields as TaxonomyField[] | undefined) || [];
   const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
   if (taxErr) return NextResponse.json({ error: taxErr }, { status: 400 });
+
+  // 1-3) 문항 제어 검증 (필수/검증 프리셋) — 서버 이중화
+  const isDemoEarly = surveyId === "demo";
+  const questionOverrides = (survey.question_overrides as QuestionOverrides | undefined) || {};
+  {
+    const err = validateOverrides(questionOverrides);
+    if (err) return NextResponse.json({ error: `question_overrides 오류: ${err}` }, { status: 500 });
+  }
+  // demo는 폼 구조 없이 통과, 그 외는 가능하면 폼 구조를 가져와 검증 (실패 시 통과)
+  let parsedQuestions: { id: string; title: string; required: boolean; type: string }[] | null = null;
+  if (isDemoEarly) {
+    parsedQuestions = null;
+  } else {
+    try {
+      const formIdForVal = (survey.form_id as string) || surveyId;
+      const svcJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_PATH || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+      if (svcJson) {
+        let credentials: Record<string, string>;
+        if (svcJson.trim().startsWith("{")) credentials = JSON.parse(svcJson);
+        else { const fs = await import("fs"); credentials = JSON.parse(fs.readFileSync(svcJson, "utf-8")); }
+        const { google } = await import("googleapis");
+        const auth = new google.auth.GoogleAuth({ credentials, scopes: ["https://www.googleapis.com/auth/forms.body.readonly"] });
+        const client = await auth.getClient();
+        const tokenRes = await (client as unknown as { getAccessToken: () => Promise<unknown> }).getAccessToken() as unknown;
+        const token = typeof tokenRes === "string" ? tokenRes : (tokenRes as { token?: string } | null)?.token || null;
+        if (token) {
+          const res = await fetch(`https://forms.googleapis.com/v1/forms/${formIdForVal}`, { headers: { Authorization: `Bearer ${token}` } });
+          if (res.ok) {
+            const j = await res.json();
+            const parsed = parseGoogleFormResponse(formIdForVal, j);
+            parsedQuestions = parsed.questions.map(q => ({ id: q.id, title: q.title, required: q.required, type: q.type }));
+          }
+        }
+      }
+    } catch { /* 검증 스킵 */ }
+  }
+  if (parsedQuestions) {
+    const qErr = validateAnswers(parsedQuestions, answers, questionOverrides);
+    if (qErr) return NextResponse.json({ error: qErr }, { status: 400 });
+  }
 
   // 2) 중복 검증
   const dupType = (survey.duplicate_check_type as string) || "none";
