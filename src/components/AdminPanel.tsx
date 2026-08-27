@@ -38,6 +38,16 @@ const CURRENT_VALUES = {
   adminEmail: "krids.org@gmail.com",
 };
 
+// 랜딩 6종 데모 템플릿 ID — 목록에서 구분용 (Landing.tsx TEMPLATE_SURVEY_MAP과 동일)
+const DEMO_SURVEY_IDS = new Set([
+  "790f4713-0894-49a4-8e93-297f8f68a614",
+  "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
+  "983d0315-4c2c-48cc-81b6-c7da291ed20a",
+  "afb5c989-95c4-4a8b-9846-e63be0d27b09",
+  "e6524f44-b0c7-4897-83c0-d934c5ed5e2a",
+  "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
+]);
+
 type Tab = "settings" | "edit" | "list";
 
 export default function AdminPanel({ role }: { role?: "administrator" | "supervisor" }) {
@@ -67,7 +77,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
   const [sectionCount, setSectionCount] = useState(0);
   // 목록 스마트 관리
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all"|"active"|"ended"|"draft">("all");
+  const [statusFilter, setStatusFilter] = useState<"all"|"active"|"ended"|"draft"|"demo">("all");
   const [listPage, setListPage] = useState(1);
   const PAGE_SIZE = 6;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -201,14 +211,16 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
     const now = new Date();
     if (statusFilter !== "all") {
       arr = arr.filter(s=>{
+        const isDemo = DEMO_SURVEY_IDS.has(s.id);
         const start = s.start_at ? new Date(s.start_at) : null;
         const end = s.end_at ? new Date(s.end_at) : null;
         const isDraft = !s.form_id;
         const isEnded = end ? now > end : false;
         const isActive = (!start || now >= start) && (!end || now <= end) && !isDraft;
-        if (statusFilter==="draft") return isDraft;
-        if (statusFilter==="ended") return isEnded;
-        if (statusFilter==="active") return isActive;
+        if (statusFilter==="demo") return isDemo;
+        if (statusFilter==="draft") return isDraft && !isDemo;
+        if (statusFilter==="ended") return isEnded && !isDemo;
+        if (statusFilter==="active") return isActive && !isDemo;
         return true;
       });
     }
@@ -542,6 +554,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             <option value="active">진행중</option>
             <option value="ended">종료됨</option>
             <option value="draft">초안(Form 미연결)</option>
+            <option value="demo">데모템플릿</option>
           </select>
           <span className="md:col-span-2 text-xs text-zinc-500 dark:text-zinc-400 self-center text-right">{totalPages} 페이지 중 {listPage}</span>
         </div>
@@ -550,23 +563,24 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             const end = s.end_at ? new Date(s.end_at) : null;
             const isEnded = end ? new Date() > end : false;
             const isDraft = !s.form_id;
+            const isDemo = DEMO_SURVEY_IDS.has(s.id);
             const isSelected = selectedIds.has(s.id);
+            const canCheck = isEnded && !isDemo;
             return (
-            <div key={s.id} className={`border rounded-xl p-4 flex gap-3 ${isSelected ? "border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950" : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800"}`}>
-              <input type="checkbox" checked={isSelected} disabled={!isEnded} onChange={()=>toggleSelect(s.id, isEnded)} title={isEnded ? "종료 설문 선택" : "종료된 설문만 선택 가능"} className="mt-1 h-4 w-4 accent-amber-600 disabled:opacity-30" />
+            <div key={s.id} className={`border rounded-xl p-4 flex gap-3 ${isSelected ? "border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950" : isDemo ? "border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-950/30" : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800"}`}>
+              <input type="checkbox" checked={isSelected} disabled={!canCheck} onChange={()=>toggleSelect(s.id, canCheck)} title={isDemo ? "데모템플릿은 삭제 불가" : canCheck ? "종료 설문 선택" : "종료된 설문만 선택 가능"} className="mt-1 h-4 w-4 accent-amber-600 disabled:opacity-30" />
               <div className="flex-1 min-w-0">
               <div className="flex flex-wrap justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-zinc-900 dark:text-white truncate">{isSelected && <span className="text-amber-600 dark:text-amber-400 mr-1">✓</span>}{s.title} <span className="text-xs text-zinc-500 dark:text-zinc-400">/{s.id.slice(0,8)}</span> {isDraft && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">초안</span>} {isEnded && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">종료</span>}</p>
+                  <p className="font-medium text-zinc-900 dark:text-white truncate">{isSelected && <span className="text-amber-600 dark:text-amber-400 mr-1">✓</span>}{s.title} <span className="text-xs text-zinc-500 dark:text-zinc-400">/{s.id.slice(0,8)}</span> {isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300">데모템플릿</span>} {isDraft && !isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">초안</span>} {isEnded && !isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">종료</span>}</p>
                   <p className="text-xs text-zinc-700 dark:text-zinc-300 mt-1">기간: {s.start_at||"—"} ~ {s.end_at||"—"} · 중복:{s.duplicate_check_type} · 지연:{s.report_delay_hours}h · preset:{s.end_message_preset}</p>
                   <p className="text-xs text-zinc-600 dark:text-zinc-400 truncate">Form: {s.form_id||"—"} · GAS: {s.gas_webapp_url ? s.gas_webapp_url.slice(0,40)+"…" : "—"}</p>
                   {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-xs text-violet-600 dark:text-violet-300 mt-1">분류: {s.taxonomy_fields.map((f: TaxonomyField)=>`${f.label}(${f.key})${f.hidden?"·숨김":""}`).join(", ")}</p>}
                   {s.question_overrides && Object.keys(s.question_overrides).length>0 && <p className="text-[11px] text-blue-600 dark:text-blue-300">문항제어 {Object.keys(s.question_overrides).length}개 · {Object.values(s.question_overrides).filter(v=>v.branchEnabled).length}개 분기</p>}
                 </div>
                 <div className="flex gap-2 self-start flex-wrap">
-                  <button onClick={()=>loadToEdit(s)} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800">편집 불러오기</button>
-                  <a href={`/s/${s.id}`} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50">응답 페이지</a>
-                  <a href={`/api/forms/${s.form_id || s.id}`} target="_blank" className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-50">JSON</a>
+                  <button onClick={()=>loadToEdit(s)} disabled={isDemo} title={isDemo ? "데모템플릿은 편집 불가 — 복제 후 사용" : "설정/편집 탭으로 불러오기"} className={`text-xs border rounded-full px-3 py-1 ${isDemo ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-700 cursor-not-allowed" : "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-700 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition"}`}>편집 불러오기</button>
+                  <a href={`/s/${s.id}`} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition">응답 페이지</a>
                 </div>
               </div>
               {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2 break-all">링크 예: /s/{s.id}?{s.taxonomy_fields.map((f: TaxonomyField)=>`${f.key}=값`).join("&")}</p>}
@@ -583,7 +597,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             <button disabled={listPage>=totalPages} onClick={()=>setListPage(p=>Math.min(totalPages,p+1))} className="px-3 py-1 text-xs border rounded-full disabled:opacity-50 dark:text-white dark:border-zinc-700">다음</button>
           </div>
         )}
-        <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400 text-center">팁: 목록이 길어지면 검색(제목/ID) + 상태 필터(진행중/종료/초안) + 페이지(6개씩)로 관리하세요. 편집은 “편집 불러오기”로 설정/편집 탭에 재로드.</p>
+        <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400 text-center">팁: 검색+상태 필터(전체/진행중/종료/초안/데모템플릿)+페이지(6개씩)로 관리. 데모템플릿은 편집·삭제 불가(보라색 배지), 실설문만 편집/삭제 가능.</p>
       </div>
       )}
 

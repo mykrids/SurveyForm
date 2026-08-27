@@ -5,6 +5,14 @@ import { rateLimit, getClientIp } from "@/lib/rateLimit";
 export const dynamic = "force-dynamic";
 
 const RETENTION_DAYS = 30;
+const DEMO_IDS = new Set([
+  "790f4713-0894-49a4-8e93-297f8f68a614",
+  "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
+  "983d0315-4c2c-48cc-81b6-c7da291ed20a",
+  "afb5c989-95c4-4a8b-9846-e63be0d27b09",
+  "e6524f44-b0c7-4897-83c0-d934c5ed5e2a",
+  "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
+]);
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
@@ -27,6 +35,7 @@ export async function GET(req: NextRequest) {
     const now = new Date();
     const threshold = RETENTION_DAYS * 24 * 60 * 60 * 1000;
     const toDelete = mem.filter((r) => {
+      if (DEMO_IDS.has(r.id as string)) return false;
       const endAt = r.end_at ? new Date(r.end_at as string) : null;
       return endAt && now.getTime() - endAt.getTime() > threshold;
     });
@@ -48,11 +57,13 @@ export async function GET(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (!candidates || candidates.length === 0) {
-    return NextResponse.json({ ok: true, deleted: 0, message: "정리 대상 없음 (종료 후 30일 경과 설문 없음)" });
+  // 데모템플릿 제외
+  const filtered = (candidates || []).filter((c: { id: string }) => !DEMO_IDS.has(c.id));
+  if (filtered.length === 0) {
+    return NextResponse.json({ ok: true, deleted: 0, message: "정리 대상 없음 (종료 후 30일 경과 설문 없음, 데모 제외)" });
   }
 
-  const ids = candidates.map((c: { id: string }) => c.id);
+  const ids = filtered.map((c: { id: string }) => c.id);
   const { error: delErr } = await supabase.from("surveys").delete().in("id", ids);
   if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
 
@@ -61,6 +72,6 @@ export async function GET(req: NextRequest) {
     ok: true,
     deleted: ids.length,
     deletedIds: ids,
-    details: candidates.map((c: { id: string; title: string; end_at: string }) => ({ id: c.id, title: c.title, end_at: c.end_at })),
+    details: filtered.map((c: { id: string; title: string; end_at: string }) => ({ id: c.id, title: c.title, end_at: c.end_at })),
   });
 }

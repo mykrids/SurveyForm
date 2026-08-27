@@ -106,20 +106,39 @@ export async function DELETE(req: NextRequest) {
   if (ids.length > 20) return NextResponse.json({ error: "한 번에 20개까지만 삭제 가능" }, { status: 400 });
   const supabase = getSupabaseAdmin();
   if (!supabase) {
+    const DEMO_MEM = new Set([
+      "790f4713-0894-49a4-8e93-297f8f68a614",
+      "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
+      "983d0315-4c2c-48cc-81b6-c7da291ed20a",
+      "afb5c989-95c4-4a8b-9846-e63be0d27b09",
+      "e6524f44-b0c7-4897-83c0-d934c5ed5e2a",
+      "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
+    ]);
     let deleted = 0;
     for (const id of ids) {
+      if (DEMO_MEM.has(id)) continue;
       const idx = mem.findIndex((r) => (r.id as string) === id);
       if (idx !== -1) { mem.splice(idx, 1); deleted++; }
     }
     return NextResponse.json({ ok: true, deleted });
   }
-  // 검증: 종료된 설문만 삭제 허용 (end_at < now)
-  const { data: found, error: findErr } = await supabase.from("surveys").select("id,end_at").in("id", ids);
+  // 검증: 종료된 설문만 삭제 허용 (end_at < now) + 데모템플릿 보호
+  const DEMO_IDS = new Set([
+    "790f4713-0894-49a4-8e93-297f8f68a614",
+    "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
+    "983d0315-4c2c-48cc-81b6-c7da291ed20a",
+    "afb5c989-95c4-4a8b-9846-e63be0d27b09",
+    "e6524f44-b0c7-4897-83c0-d934c5ed5e2a",
+    "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
+  ]);
+  const filteredIds = ids.filter((id) => !DEMO_IDS.has(id));
+  if (filteredIds.length === 0) return NextResponse.json({ error: "데모템플릿은 삭제할 수 없습니다." }, { status: 400 });
+  const { data: found, error: findErr } = await supabase.from("surveys").select("id,end_at").in("id", filteredIds);
   if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
   const now = new Date();
   const endedIds = (found || []).filter((r: { id: string; end_at: string | null }) => r.end_at && new Date(r.end_at) < now).map((r: { id: string }) => r.id);
   if (endedIds.length === 0) return NextResponse.json({ error: "삭제 가능한 종료 설문이 없습니다. (종료된 설문만 삭제 가능)" }, { status: 400 });
-  const notEnded = ids.filter((id) => !endedIds.includes(id));
+  const notEnded = filteredIds.filter((id) => !endedIds.includes(id));
   if (notEnded.length > 0) {
     // 부분 허용: 종료된 것만 삭제, 나머지는 스킵 안내
   }
