@@ -27,5 +27,11 @@ export type SurveyRow = {
   report_sent: boolean;
   report_sent_at: string | null;
   form_id: string | null;
+  is_template?: boolean;
+  template_category?: string | null;
+  template_color?: string | null;
+  template_order?: number | null;
+  taxonomy_fields?: unknown;
+  question_overrides?: unknown;
   created_at?: string;
 };

@@ -19,6 +19,10 @@ type Survey = {
   admin_email: string | null;
   report_sent: boolean;
   form_id: string | null;
+  is_template?: boolean;
+  template_category?: string | null;
+  template_color?: string | null;
+  template_order?: number | null;
   taxonomy_fields?: TaxonomyField[];
   question_overrides?: QuestionOverrides;
   created_at?: string;
@@ -81,6 +85,9 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
   const [listPage, setListPage] = useState(1);
   const PAGE_SIZE = 6;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [templateModal, setTemplateModal] = useState<Survey | null>(null);
+  const [templateCategory, setTemplateCategory] = useState("Education");
+  const [templateColor, setTemplateColor] = useState("bg-violet-500");
 
   async function load() {
     setLoading(true);
@@ -211,7 +218,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
     const now = new Date();
     if (statusFilter !== "all") {
       arr = arr.filter(s=>{
-        const isDemo = DEMO_SURVEY_IDS.has(s.id);
+        const isDemo = DEMO_SURVEY_IDS.has(s.id) || !!s.is_template;
         const start = s.start_at ? new Date(s.start_at) : null;
         const end = s.end_at ? new Date(s.end_at) : null;
         const isDraft = !s.form_id;
@@ -254,6 +261,28 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
       setSelectedIds(new Set());
       load();
     } catch (e) { setMsg(`삭제 실패: ${String(e)}`); }
+  }
+
+  function openTemplateModal(s: Survey) {
+    setTemplateCategory(s.template_category || "Education");
+    setTemplateColor(s.template_color || "bg-violet-500");
+    setTemplateModal(s);
+  }
+  async function confirmTemplateRegister() {
+    if (!templateModal) return;
+    const isDeregister = !!templateModal.is_template;
+    const body = isDeregister
+      ? { id: templateModal.id, is_template: false }
+      : { id: templateModal.id, is_template: true, template_category: templateCategory, template_color: templateColor };
+    setMsg(isDeregister ? "템플릿 해제 중…" : "템플릿 등록 중…");
+    try {
+      const r = await fetch("/api/admin/surveys", { method: "PATCH", headers: { "Content-Type":"application/json" }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok) { setMsg(`오류: ${j.error || r.status}`); return; }
+      setMsg(isDeregister ? "템플릿 해제됨 — 랜딩에서 제거됨" : "템플릿 등록됨 — 랜딩 + 버튼 펼치면 노출");
+      setTemplateModal(null);
+      load();
+    } catch (e) { setMsg(`실패: ${String(e)}`); }
   }
 
   return (
@@ -563,16 +592,19 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             const end = s.end_at ? new Date(s.end_at) : null;
             const isEnded = end ? new Date() > end : false;
             const isDraft = !s.form_id;
-            const isDemo = DEMO_SURVEY_IDS.has(s.id);
+            const isFixedDemo = DEMO_SURVEY_IDS.has(s.id);
+            const isTemplate = !!s.is_template;
+            const isDemo = isFixedDemo || isTemplate;
             const isSelected = selectedIds.has(s.id);
             const canCheck = isEnded && !isDemo;
+            const canPromote = !isFixedDemo && !isDraft && !!s.form_id;
             return (
             <div key={s.id} className={`border rounded-xl p-4 flex gap-3 ${isSelected ? "border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950" : isDemo ? "border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-950/30" : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800"}`}>
               <input type="checkbox" checked={isSelected} disabled={!canCheck} onChange={()=>toggleSelect(s.id, canCheck)} title={isDemo ? "데모템플릿은 삭제 불가" : canCheck ? "종료 설문 선택" : "종료된 설문만 선택 가능"} className="mt-1 h-4 w-4 accent-amber-600 disabled:opacity-30" />
               <div className="flex-1 min-w-0">
               <div className="flex flex-wrap justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-zinc-900 dark:text-white truncate">{isSelected && <span className="text-amber-600 dark:text-amber-400 mr-1">✓</span>}{s.title} <span className="text-xs text-zinc-500 dark:text-zinc-400">/{s.id.slice(0,8)}</span> {isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300">데모템플릿</span>} {isDraft && !isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">초안</span>} {isEnded && !isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">종료</span>}</p>
+                  <p className="font-medium text-zinc-900 dark:text-white truncate">{isSelected && <span className="text-amber-600 dark:text-amber-400 mr-1">✓</span>}{s.title} <span className="text-xs text-zinc-500 dark:text-zinc-400">/{s.id.slice(0,8)}</span> {isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300">{isFixedDemo ? "데모템플릿" : "추가 템플릿"}</span>} {isDraft && !isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">초안</span>} {isEnded && !isDemo && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">종료</span>}</p>
                   <p className="text-xs text-zinc-700 dark:text-zinc-300 mt-1">기간: {s.start_at||"—"} ~ {s.end_at||"—"} · 중복:{s.duplicate_check_type} · 지연:{s.report_delay_hours}h · preset:{s.end_message_preset}</p>
                   <p className="text-xs text-zinc-600 dark:text-zinc-400 truncate">Form: {s.form_id||"—"} · GAS: {s.gas_webapp_url ? s.gas_webapp_url.slice(0,40)+"…" : "—"}</p>
                   {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-xs text-violet-600 dark:text-violet-300 mt-1">분류: {s.taxonomy_fields.map((f: TaxonomyField)=>`${f.label}(${f.key})${f.hidden?"·숨김":""}`).join(", ")}</p>}
@@ -581,6 +613,13 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
                 <div className="flex gap-2 self-start flex-wrap">
                   <button onClick={()=>loadToEdit(s)} disabled={isDemo} title={isDemo ? "데모템플릿은 편집 불가 — 복제 후 사용" : "설정/편집 탭으로 불러오기"} className={`text-xs border rounded-full px-3 py-1 ${isDemo ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-700 cursor-not-allowed" : "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-700 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition"}`}>편집 불러오기</button>
                   <a href={`/s/${s.id}`} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition">응답 페이지</a>
+                  {canPromote && (
+                    isTemplate ? (
+                      <button onClick={()=>openTemplateModal(s)} className="text-xs border border-violet-300 dark:border-violet-700 rounded-full px-3 py-1 bg-violet-600 text-white hover:bg-violet-700 transition">★ 해제</button>
+                    ) : (
+                      <button onClick={()=>openTemplateModal(s)} className="text-xs border border-violet-300 dark:border-violet-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950 transition">★ 템플릿 등록</button>
+                    )
+                  )}
                 </div>
               </div>
               {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2 break-all">링크 예: /s/{s.id}?{s.taxonomy_fields.map((f: TaxonomyField)=>`${f.key}=값`).join("&")}</p>}
@@ -597,8 +636,46 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             <button disabled={listPage>=totalPages} onClick={()=>setListPage(p=>Math.min(totalPages,p+1))} className="px-3 py-1 text-xs border rounded-full disabled:opacity-50 dark:text-white dark:border-zinc-700">다음</button>
           </div>
         )}
-        <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400 text-center">팁: 검색+상태 필터(전체/진행중/종료/초안/데모템플릿)+페이지(6개씩)로 관리. 데모템플릿은 편집·삭제 불가(보라색 배지), 실설문만 편집/삭제 가능.</p>
+        <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400 text-center">팁: 검색+상태 필터(전체/진행중/종료/초안/데모템플릿)+페이지(6개씩)로 관리. 데모템플릿은 편집·삭제 불가(보라색 배지), 실설문만 편집/삭제 가능. ★ 템플릿 등록은 실설문(Form 연결)에서만 — 등록 시 랜딩 6종 아래 아코디언에 자동 추가(최대 9개, 총 15개).</p>
       </div>
+       )}
+      {templateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-2xl p-6 border dark:border-zinc-800">
+            <h3 className="font-bold dark:text-white">{templateModal.is_template ? "템플릿 해제" : "템플릿으로 등록"}</h3>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300 leading-relaxed">
+              {templateModal.is_template
+                ? `"${templateModal.title}"을(를) 랜딩 템플릿에서 제거합니다.`
+                : `"${templateModal.title}"을(를) 랜딩 6종 아래 추가 템플릿으로 공개합니다. 소비자 데모로 노출됩니다.`}
+            </p>
+            {!templateModal.is_template && (
+              <div className="mt-4 grid gap-3">
+                <label className="text-xs font-medium dark:text-white">카테고리
+                  <select value={templateCategory} onChange={e=>setTemplateCategory(e.target.value)} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 dark:text-white">
+                    <option value="CSAT">CSAT</option>
+                    <option value="Education">Education</option>
+                    <option value="Event">Event</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium dark:text-white">색상
+                  <select value={templateColor} onChange={e=>setTemplateColor(e.target.value)} className="mt-1 w-full border rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 dark:text-white">
+                    <option value="bg-violet-500">violet</option>
+                    <option value="bg-blue-500">blue</option>
+                    <option value="bg-emerald-500">emerald</option>
+                    <option value="bg-orange-500">orange</option>
+                    <option value="bg-pink-500">pink</option>
+                    <option value="bg-cyan-500">cyan</option>
+                  </select>
+                </label>
+                <p className="text-[11px] text-zinc-500">총 15개 제한(기본 6 + 추가 9) — 초과 시 해제 후 등록하세요.</p>
+              </div>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={()=>setTemplateModal(null)} className="rounded-full border dark:border-zinc-700 px-5 py-2 text-sm dark:text-white">취소</button>
+              <button onClick={confirmTemplateRegister} className={`rounded-full px-5 py-2 text-sm text-white ${templateModal.is_template ? "bg-zinc-900 dark:bg-white dark:text-black" : "bg-violet-600 hover:bg-violet-700"}`}>{templateModal.is_template ? "해제" : "등록"}</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 도움말 */}

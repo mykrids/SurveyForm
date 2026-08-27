@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LANDING_DATA } from "@/lib/constants";
 
 const TEMPLATE_SURVEY_MAP: Record<string, string> = {
@@ -16,6 +16,13 @@ export default function Landing() {
   const { hero, features, templates, pricing } = LANDING_DATA;
   const [demoGuide, setDemoGuide] = useState(false);
   const [startGuide, setStartGuide] = useState(false);
+  const [dynamicTemplates, setDynamicTemplates] = useState<{ id: string; title: string; category: string; color: string }[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    fetch("/api/landing/templates").then(r=>r.json()).then(j=>{
+      if (j.templates) setDynamicTemplates(j.templates);
+    }).catch(()=>{});
+  }, []);
 
   function handleDemoClick(e: React.MouseEvent) {
     e.preventDefault();
@@ -74,7 +81,7 @@ export default function Landing() {
 
       <section id="templates" className="mx-auto max-w-6xl px-6 py-12">
         <h2 className="text-2xl font-bold dark:text-white">설문 템플릿</h2>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">카드를 선택하면 해당 데모 설문으로 이동합니다</p>
+        <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">카드를 선택하면 해당 데모 설문으로 이동합니다 · 기본 6종 + 추가 최대 9종(총 15종)</p>
         <div className="mt-6 grid md:grid-cols-3 gap-4">
           {templates.map(t=>(
             <Link key={t.id} href={`/s/${TEMPLATE_SURVEY_MAP[t.id] || "demo"}`} className="border dark:border-zinc-800 rounded-2xl p-5 hover:shadow dark:hover:shadow-zinc-900 transition bg-white dark:bg-zinc-900">
@@ -85,6 +92,26 @@ export default function Landing() {
             </Link>
           ))}
         </div>
+        {dynamicTemplates.length > 0 && (
+          <div className="mt-4">
+            <button onClick={()=>setExpanded(!expanded)} className="w-full rounded-2xl border-2 border-dashed border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-950/20 hover:bg-violet-50 dark:hover:bg-violet-950/40 px-6 py-4 text-sm font-medium text-violet-700 dark:text-violet-300 transition flex items-center justify-center gap-2">
+              <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-white text-xs transition-transform ${expanded ? "rotate-45" : ""}`}>+</span>
+              {expanded ? "접기" : `추가 템플릿 보기 (${dynamicTemplates.length}/9)`} <span className="text-xs font-normal text-violet-500 dark:text-violet-400">총 {6 + dynamicTemplates.length}종</span>
+            </button>
+            {expanded && (
+              <div className="mt-4 grid md:grid-cols-3 gap-4 animate-in">
+                {dynamicTemplates.map(t=>(
+                  <Link key={t.id} href={`/s/${t.id}`} className="border border-violet-200 dark:border-violet-800 rounded-2xl p-5 hover:shadow transition bg-white dark:bg-zinc-900">
+                    <div className={`h-2 w-10 rounded-full ${t.color} mb-3`} />
+                    <span className="text-xs bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 px-2 py-1 rounded-full">{t.category}</span>
+                    <h3 className="font-semibold mt-2 dark:text-white">{t.title}</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">실사용 사례 기반 · 데모 진행 가능</p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section id="pricing" className="mx-auto max-w-6xl px-6 py-12">

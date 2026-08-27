@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
     const threshold = RETENTION_DAYS * 24 * 60 * 60 * 1000;
     const toDelete = mem.filter((r) => {
       if (DEMO_IDS.has(r.id as string)) return false;
+      if ((r as Record<string, unknown>).is_template) return false;
       const endAt = r.end_at ? new Date(r.end_at as string) : null;
       return endAt && now.getTime() - endAt.getTime() > threshold;
     });
@@ -48,16 +49,29 @@ export async function GET(req: NextRequest) {
 
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
 
-  // 종료 후 30일이 지난 설문 조회
+  // 종료 후 30일이 지난 설문 조회 (템플릿 제외)
   const { data: candidates, error } = await supabase
     .from("surveys")
-    .select("id,title,end_at")
+    .select("id,title,end_at,is_template")
     .not("end_at", "is", null)
+    .eq("is_template", false)
     .lt("end_at", cutoff.toISOString());
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.message.includes("is_template")) {
+      const retry = await supabase.from("surveys").select("id,title,end_at").not("end_at", "is", null).lt("end_at", cutoff.toISOString());
+      if (retry.error) return NextResponse.json({ error: retry.error.message }, { status: 500 });
+      const filt = (retry.data || []).filter((c: { id: string }) => !DEMO_IDS.has(c.id));
+      if (filt.length === 0) return NextResponse.json({ ok: true, deleted: 0, message: "정리 대상 없음" });
+      const rids = filt.map((c: { id: string }) => c.id);
+      const { error: d2 } = await supabase.from("surveys").delete().in("id", rids);
+      if (d2) return NextResponse.json({ error: d2.message }, { status: 500 });
+      return NextResponse.json({ ok: true, deleted: rids.length, deletedIds: rids, details: filt, warning: "is_template 미마이그레이션 — fallback" });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
-  // 데모템플릿 제외
+  // 데모템플릿 제외 + 템플릿 제외(이미 쿼리에서 is_template=false)
   const filtered = (candidates || []).filter((c: { id: string }) => !DEMO_IDS.has(c.id));
   if (filtered.length === 0) {
     return NextResponse.json({ ok: true, deleted: 0, message: "정리 대상 없음 (종료 후 30일 경과 설문 없음, 데모 제외)" });

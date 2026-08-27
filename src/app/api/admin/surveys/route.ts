@@ -95,6 +95,65 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ survey: data });
 }
 
+export async function PATCH(req: NextRequest) {
+  const role = requireAdmin(req);
+  if (!role) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 });
+  if (role !== "administrator") return NextResponse.json({ error: "템플릿 등록은 Administrator만 가능합니다." }, { status: 403 });
+  const body = await req.json();
+  const { id, is_template, template_category, template_color } = body as {
+    id?: string;
+    is_template?: boolean;
+    template_category?: string;
+    template_color?: string;
+  };
+  if (!id || typeof is_template !== "boolean") return NextResponse.json({ error: "id와 is_template(boolean) 필요" }, { status: 400 });
+  const FIXED_IDS = new Set([
+    "790f4713-0894-49a4-8e93-297f8f68a614",
+    "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
+    "983d0315-4c2c-48cc-81b6-c7da291ed20a",
+    "afb5c989-95c4-4a8b-9846-e63be0d27b09",
+    "e6524f44-b0c7-4897-83c0-d934c5ed5e2a",
+    "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
+  ]);
+  if (FIXED_IDS.has(id)) return NextResponse.json({ error: "기본 6종은 변경할 수 없습니다." }, { status: 400 });
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    const idx = mem.findIndex((r) => (r.id as string) === id);
+    if (idx === -1) return NextResponse.json({ error: "설문을 찾을 수 없습니다." }, { status: 404 });
+    if (is_template) {
+      const curCount = mem.filter((r) => (r as Record<string, unknown>).is_template && !FIXED_IDS.has(r.id as string)).length;
+      if (curCount >= 9) return NextResponse.json({ error: "추가 템플릿은 최대 9개(총 15개)까지만 등록 가능" }, { status: 400 });
+    }
+    const row = mem[idx] as Record<string, unknown>;
+    row.is_template = is_template;
+    if (template_category) row.template_category = template_category;
+    if (template_color) row.template_color = template_color;
+    return NextResponse.json({ ok: true, survey: row });
+  }
+
+  if (is_template) {
+    const { data: existing, error: cntErr } = await supabase.from("surveys").select("id").eq("is_template", true);
+    if (cntErr) {
+      if (!cntErr.message.includes("is_template")) return NextResponse.json({ error: cntErr.message }, { status: 500 });
+    } else {
+      const curCount = (existing || []).filter((r: { id: string }) => !FIXED_IDS.has(r.id)).length;
+      if (curCount >= 9) return NextResponse.json({ error: "추가 템플릿은 최대 9개(총 15개)까지만 등록 가능 — 해제 후 등록하세요" }, { status: 400 });
+    }
+  }
+
+  const payload: Record<string, unknown> = { is_template };
+  if (template_category) payload.template_category = template_category;
+  if (template_color) payload.template_color = template_color;
+
+  const { data, error } = await supabase.from("surveys").update(payload).eq("id", id).select().single();
+  if (error) {
+    if (error.message.includes("is_template")) return NextResponse.json({ error: "is_template 컬럼 없음 — Supabase 마이그레이션 필요: alter table surveys add column ..." }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, survey: data });
+}
+
 export async function DELETE(req: NextRequest) {
   const role = requireAdmin(req);
   if (!role) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 });
@@ -117,6 +176,8 @@ export async function DELETE(req: NextRequest) {
     let deleted = 0;
     for (const id of ids) {
       if (DEMO_MEM.has(id)) continue;
+      const found = mem.find((r) => (r.id as string) === id) as Record<string, unknown> | undefined;
+      if (found?.is_template) continue;
       const idx = mem.findIndex((r) => (r.id as string) === id);
       if (idx !== -1) { mem.splice(idx, 1); deleted++; }
     }
@@ -133,11 +194,15 @@ export async function DELETE(req: NextRequest) {
   ]);
   const filteredIds = ids.filter((id) => !DEMO_IDS.has(id));
   if (filteredIds.length === 0) return NextResponse.json({ error: "데모템플릿은 삭제할 수 없습니다." }, { status: 400 });
-  const { data: found, error: findErr } = await supabase.from("surveys").select("id,end_at").in("id", filteredIds);
+  const { data: found, error: findErr } = await supabase.from("surveys").select("id,end_at,is_template").in("id", filteredIds);
   if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
   const now = new Date();
-  const endedIds = (found || []).filter((r: { id: string; end_at: string | null }) => r.end_at && new Date(r.end_at) < now).map((r: { id: string }) => r.id);
-  if (endedIds.length === 0) return NextResponse.json({ error: "삭제 가능한 종료 설문이 없습니다. (종료된 설문만 삭제 가능)" }, { status: 400 });
+  const templateBlocked = (found || []).filter((r: { id: string; is_template?: boolean }) => r.is_template).map((r: { id: string }) => r.id);
+  const endedIds = (found || []).filter((r: { id: string; end_at: string | null; is_template?: boolean }) => !r.is_template && r.end_at && new Date(r.end_at) < now).map((r: { id: string }) => r.id);
+  if (endedIds.length === 0) {
+    if (templateBlocked.length > 0) return NextResponse.json({ error: "템플릿으로 등록된 설문은 삭제할 수 없습니다 — 먼저 템플릿 해제하세요" }, { status: 400 });
+    return NextResponse.json({ error: "삭제 가능한 종료 설문이 없습니다. (종료된 설문만 삭제 가능)" }, { status: 400 });
+  }
   const notEnded = filteredIds.filter((id) => !endedIds.includes(id));
   if (notEnded.length > 0) {
     // 부분 허용: 종료된 것만 삭제, 나머지는 스킵 안내
