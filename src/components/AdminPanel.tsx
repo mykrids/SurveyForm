@@ -70,6 +70,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
   const [statusFilter, setStatusFilter] = useState<"all"|"active"|"ended"|"draft">("all");
   const [listPage, setListPage] = useState(1);
   const PAGE_SIZE = 6;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   async function load() {
     setLoading(true);
@@ -217,6 +218,31 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((listPage-1)*PAGE_SIZE, listPage*PAGE_SIZE);
   useEffect(()=>{ setListPage(1); }, [search, statusFilter]);
+  useEffect(()=>{ setSelectedIds(new Set()); }, [search, statusFilter]);
+
+  function toggleSelect(id: string, isEnded: boolean) {
+    if (!isEnded) return;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return;
+    if (role !== "administrator") { setMsg("오류: 삭제는 Administrator만 가능합니다."); return; }
+    if (!confirm(`선택한 종료 설문 ${selectedIds.size}개를 삭제하시겠습니까? (복구 불가, 응답 로그도 함께 삭제)`)) return;
+    setMsg("삭제 중…");
+    try {
+      const r = await fetch("/api/admin/surveys", { method: "DELETE", headers: { "Content-Type":"application/json" }, body: JSON.stringify({ ids: Array.from(selectedIds) }) });
+      const j = await r.json();
+      if (!r.ok) { setMsg(`오류: ${j.error || r.status}`); return; }
+      setMsg(`삭제 완료: ${j.deleted}개 삭제됨`);
+      setSelectedIds(new Set());
+      load();
+    } catch (e) { setMsg(`삭제 실패: ${String(e)}`); }
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8 bg-background text-foreground">
@@ -421,7 +447,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">현재 입력된 Form ID: <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">{form.form_id || "— (설정 탭에서 입력)"}</code> — 문항을 불러와 체크만으로 제어하세요. OFF면 현재 동작과 동일해 안전합니다.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={fetchQuestions} className="rounded-full bg-zinc-900 dark:bg-white dark:text-black text-white px-4 py-2 text-xs font-medium hover:bg-zinc-800">문항 불러오기</button>
+          <button type="button" onClick={fetchQuestions} className="rounded-full bg-zinc-900 dark:bg-white dark:text-black text-white px-4 py-2 text-xs font-medium hover:bg-amber-600 dark:hover:bg-amber-500 hover:text-white dark:hover:text-white transition">문항 불러오기</button>
           {fetchStatus && <span className="text-xs text-zinc-600 dark:text-zinc-400 self-center">{fetchStatus}</span>}
         </div>
         {!fetchedQuestions && <p className="text-xs text-zinc-500 dark:text-zinc-400">Form ID를 입력한 뒤 문항을 불러오면 편집 UI가 나타납니다.</p>}
@@ -502,9 +528,13 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
       {activeTab==="list" && (
       <div className="mt-6 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 bg-white dark:bg-zinc-900">
         <div className="flex flex-wrap justify-between gap-3 items-center">
-          <h2 className="font-semibold text-zinc-900 dark:text-white">등록된 설문 {loading ? "(로딩…)" : `(${filtered.length}/${surveys.length})`}</h2>
-          <button onClick={load} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800">새로고침</button>
+          <h2 className="font-semibold text-zinc-900 dark:text-white">등록된 설문 {loading ? "(로딩…)" : `(${filtered.length}/${surveys.length})`} {selectedIds.size>0 && <span className="text-amber-600 dark:text-amber-400">· {selectedIds.size}개 선택</span>}</h2>
+          <div className="flex gap-2">
+            {selectedIds.size>0 && <button onClick={deleteSelected} className="text-xs rounded-full bg-red-600 text-white px-4 py-1.5 font-medium hover:bg-red-700 transition">선택 삭제 ({selectedIds.size})</button>}
+            <button onClick={load} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-800">새로고침</button>
+          </div>
         </div>
+        {selectedIds.size>0 && <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">종료된 설문만 선택 가능 — 체크된 항목은 제목 앞에 ✓ 표시</p>}
         <div className="mt-3 grid md:grid-cols-12 gap-2">
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="검색: 제목 / ID / Form ID" className="md:col-span-7 border border-zinc-300 dark:border-zinc-700 rounded-full px-4 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400" />
           <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)} className="md:col-span-3 border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white">
@@ -520,11 +550,14 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             const end = s.end_at ? new Date(s.end_at) : null;
             const isEnded = end ? new Date() > end : false;
             const isDraft = !s.form_id;
+            const isSelected = selectedIds.has(s.id);
             return (
-            <div key={s.id} className="border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 bg-zinc-50 dark:bg-zinc-800">
+            <div key={s.id} className={`border rounded-xl p-4 flex gap-3 ${isSelected ? "border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950" : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800"}`}>
+              <input type="checkbox" checked={isSelected} disabled={!isEnded} onChange={()=>toggleSelect(s.id, isEnded)} title={isEnded ? "종료 설문 선택" : "종료된 설문만 선택 가능"} className="mt-1 h-4 w-4 accent-amber-600 disabled:opacity-30" />
+              <div className="flex-1 min-w-0">
               <div className="flex flex-wrap justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-zinc-900 dark:text-white truncate">{s.title} <span className="text-xs text-zinc-500 dark:text-zinc-400">/{s.id.slice(0,8)}</span> {isDraft && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">초안</span>} {isEnded && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">종료</span>}</p>
+                  <p className="font-medium text-zinc-900 dark:text-white truncate">{isSelected && <span className="text-amber-600 dark:text-amber-400 mr-1">✓</span>}{s.title} <span className="text-xs text-zinc-500 dark:text-zinc-400">/{s.id.slice(0,8)}</span> {isDraft && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300">초안</span>} {isEnded && <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300">종료</span>}</p>
                   <p className="text-xs text-zinc-700 dark:text-zinc-300 mt-1">기간: {s.start_at||"—"} ~ {s.end_at||"—"} · 중복:{s.duplicate_check_type} · 지연:{s.report_delay_hours}h · preset:{s.end_message_preset}</p>
                   <p className="text-xs text-zinc-600 dark:text-zinc-400 truncate">Form: {s.form_id||"—"} · GAS: {s.gas_webapp_url ? s.gas_webapp_url.slice(0,40)+"…" : "—"}</p>
                   {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-xs text-violet-600 dark:text-violet-300 mt-1">분류: {s.taxonomy_fields.map((f: TaxonomyField)=>`${f.label}(${f.key})${f.hidden?"·숨김":""}`).join(", ")}</p>}
@@ -537,6 +570,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
                 </div>
               </div>
               {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2 break-all">링크 예: /s/{s.id}?{s.taxonomy_fields.map((f: TaxonomyField)=>`${f.key}=값`).join("&")}</p>}
+              </div>
             </div>
           );})}
           {!loading && filtered.length===0 && <p className="text-sm text-zinc-600 dark:text-zinc-400 text-center py-6">검색 결과가 없습니다 — 검색어/필터를 변경하세요.</p>}

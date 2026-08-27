@@ -94,3 +94,36 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ survey: data });
 }
+
+export async function DELETE(req: NextRequest) {
+  const role = requireAdmin(req);
+  if (!role) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 });
+  if (role !== "administrator") return NextResponse.json({ error: "삭제는 Administrator만 가능합니다." }, { status: 403 });
+  let body: { ids?: string[] };
+  try { body = await req.json(); } catch { return NextResponse.json({ error: "ids required" }, { status: 400 }); }
+  const ids = body.ids;
+  if (!Array.isArray(ids) || ids.length === 0) return NextResponse.json({ error: "ids 배열이 필요합니다." }, { status: 400 });
+  if (ids.length > 20) return NextResponse.json({ error: "한 번에 20개까지만 삭제 가능" }, { status: 400 });
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    let deleted = 0;
+    for (const id of ids) {
+      const idx = mem.findIndex((r) => (r.id as string) === id);
+      if (idx !== -1) { mem.splice(idx, 1); deleted++; }
+    }
+    return NextResponse.json({ ok: true, deleted });
+  }
+  // 검증: 종료된 설문만 삭제 허용 (end_at < now)
+  const { data: found, error: findErr } = await supabase.from("surveys").select("id,end_at").in("id", ids);
+  if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
+  const now = new Date();
+  const endedIds = (found || []).filter((r: { id: string; end_at: string | null }) => r.end_at && new Date(r.end_at) < now).map((r: { id: string }) => r.id);
+  if (endedIds.length === 0) return NextResponse.json({ error: "삭제 가능한 종료 설문이 없습니다. (종료된 설문만 삭제 가능)" }, { status: 400 });
+  const notEnded = ids.filter((id) => !endedIds.includes(id));
+  if (notEnded.length > 0) {
+    // 부분 허용: 종료된 것만 삭제, 나머지는 스킵 안내
+  }
+  const { error: delErr } = await supabase.from("surveys").delete().in("id", endedIds);
+  if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+  return NextResponse.json({ ok: true, deleted: endedIds.length, skipped: notEnded.length, skippedIds: notEnded });
+}
