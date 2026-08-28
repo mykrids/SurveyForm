@@ -286,12 +286,16 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     if (!form) return <div className="mx-auto max-w-[816px] w-full px-6 py-16 text-center text-zinc-500 dark:text-zinc-400" style={{maxWidth:816}}>설문 로딩 중…</div>;
 
     function renderDesc(text: string) {
-      // 강의 평가 템플릿처럼 단락 구분: \n\n 유지 + 대학 행사 템플릿은 조사 대상/소요 시간/익명성 보장 앞에 단락 공백 주입
+      // 강의 평가 템플릿처럼 단락 구분: \n\n 유지 + 대학 행사/교육신청서 템플릿 단락 공백 주입
       const normalized = text.replace(/\r\n/g, "\n")
         .replace(/\n(?=조사 대상\s*:)/g, "\n\n")
         .replace(/\n(?=소요 시간\s*:)/g, "\n")
         .replace(/\n(?=익명성 보장\s*:)/g, "\n")
-        .replace(/(익명성 보장\s*:[^\n]*)\n(?=바쁘)/g, "$1\n\n");
+        .replace(/(익명성 보장\s*:[^\n]*)\n(?=바쁘)/g, "$1\n\n")
+        // 교육신청서: "동일 교육과정은 중복 신청할 수 없습니다." 뒤 단락 여백
+        .replace(/(동일 교육과정은 중복 신청할 수 없습니다\.)\s*\n/g, "$1\n\n")
+        // 교육신청서: "모집방법: 선착순" 뒤 단락 여백 (과정별 반복 포함)
+        .replace(/(모집방법:\s*선착순)\s*\n/g, "$1\n\n");
       const lines = normalized.split("\n");
       const out: React.ReactNode[] = [];
       for (let li = 0; li < lines.length; li++) {
