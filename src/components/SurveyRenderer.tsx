@@ -178,18 +178,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
             return;
           }
         }
-        // GRID 중복 순위 검사: 같은 순위를 두 행에 중복 선택했는지 경고 (한국식 순위 설문에서는 흔히 중복 금지)
-        if (q.type === "GRID" && q.gridRows && q.gridColumns) {
-          const map = answers[q.id] as Record<string,string> | undefined;
-          if (map) {
-            const vals = Object.values(map).filter(Boolean);
-            const dup = vals.filter((v,i,a)=> a.indexOf(v) !== i);
-            if (dup.length > 0) {
-              setStatus(`‘${q.title}’에서 순위 ‘${dup[0]}’가 중복 선택되었습니다. 각 순위는 한 번만 선택해 주세요.`);
-              return;
-            }
-          }
-        }
+        // GRID는 행별 독립 평가(1~5순위 각각) — 중복 허용 (10개 항목을 5개 순위로 평가하므로 같은 순위 중복이 정상)
       }
     }
     setStatus("제출 중…");
@@ -320,18 +309,6 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         if (arr.length > q.maxChoices) {
           setStatus(`‘${q.title}’은(는) 최대 ${q.maxChoices}개까지 선택 가능합니다. (${arr.length}/${q.maxChoices})`);
           return;
-        }
-      }
-      if (q.type === "GRID" && (q as ParsedForm["questions"][number]).gridRows) {
-        const map = v as Record<string,string> | undefined;
-        const gridQ = q as ParsedForm["questions"][number];
-        if (gridQ.gridColumns && gridQ.gridRows) {
-          const vals = map ? Object.values(map).filter(Boolean) : [];
-          const dup = vals.filter((x,i,a)=> a.indexOf(x) !== i);
-          if (dup.length > 0) {
-            setStatus(`‘${q.title}’에서 순위 ‘${dup[0]}’가 중복 선택되었습니다. 각 순위는 한 번만 선택해 주세요.`);
-            return;
-          }
         }
       }
     }
@@ -507,9 +484,8 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
                             <div className="text-sm text-zinc-800 dark:text-zinc-200 p-3 pr-2 border-r dark:border-zinc-700 bg-white dark:bg-zinc-900 flex items-center">{row.title} {effReq && <span className="text-red-500 ml-1">*</span>}</div>
                             {cols.map(col=>{
                               const checked = sel === col;
-                              const disabled = !checked && Object.values(map).includes(col);
                               return (
-                                <label key={col} className={`flex justify-center items-center p-2 border-l dark:border-zinc-700 bg-white dark:bg-zinc-900 ${disabled ? "opacity-40" : ""}`}>
+                                <label key={col} className="flex justify-center items-center p-2 border-l dark:border-zinc-700 bg-white dark:bg-zinc-900">
                                   <input type="radio" name={`${q.id}_${row.id}`} checked={checked} onChange={()=>{ setGridAns(q.id, row.id, col); setStatus(""); }} className="accent-zinc-900" />
                                 </label>
                               );
@@ -518,7 +494,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
                         );
                       })}
                     </div>
-                    <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{allFilled ? "✓ 모든 항목에 순위를 선택했습니다." : `각 행마다 하나의 순위를 선택하세요 — 같은 순위는 중복 불가 (${Object.keys(map).length}/${rows.length})`}</p>
+                    <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{allFilled ? "✓ 모든 항목에 순위를 선택했습니다." : `각 행마다 하나의 순위를 선택하세요 — 행별 독립 평가, 같은 순위 중복 가능 (${Object.keys(map).length}/${rows.length})`}</p>
                   </div>
                 );
               })()}
