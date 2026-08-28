@@ -25,11 +25,24 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   useEffect(()=>{
     fetch(`/api/forms/${surveyId}`).then(r=>r.json()).then(j=>{
       if (j.form) {
-        // 설문 제목은 Supabase surveys.title을 우선 사용 — Google Form의 documentTitle/title이 비어도 Supabase에 저장된 제목으로 표시
-        // 1Ifoy... 처럼 formId 폴백(주소 노출) 방지
         setForm(j.form); setPage(0);
+        // 구글 폼의 goToSectionId(분기) 자동 추론 — DB question_overrides가 없어도 동작 (마이그레이션 전/구글 설정 미연동 대비)
+        if (j.raw) {
+          const inferred = inferBranchFromRaw(j.raw as Record<string, unknown>, j.form as ParsedForm);
+          if (Object.keys(inferred).length > 0) {
+            setOverrides(prev => {
+              // DB에 이미 분기가 있으면 그것을 우선, 없으면 추론값 사용
+              const merged: QuestionOverrides = { ...inferred };
+              for (const [k, v] of Object.entries(prev)) {
+                if (v && (v as QuestionOverrides[string])?.branchEnabled) merged[k] = v as QuestionOverrides[string];
+              }
+              // 추론 결과가 있고 DB가 비어있으면 즉시 적용
+              if (Object.keys(prev).length === 0) return inferred;
+              return Object.keys(merged).length ? merged : prev;
+            });
+          }
+        }
       }
-      // 미지원 문항 안내는 배너(form.unsupported)로 이미 표시되므로 status 중복 방지 — 에러성 warning만 상태로 노출
       if (j.warning && !j.warning.includes("지원되지 않는 문항")) setStatus(j.warning);
     }).catch(()=>setStatus("폼 로드 실패"));
     // taxonomy + question_overrides + title meta
@@ -45,7 +58,10 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
           }
           if (Object.keys(init).length>0) setTaxonomyValues(init);
         }
-        if (j.survey?.question_overrides) setOverrides(j.survey.question_overrides as QuestionOverrides);
+        if (j.survey?.question_overrides && Object.keys(j.survey.question_overrides as object).length > 0) {
+          const dbOv = j.survey.question_overrides as QuestionOverrides;
+          setOverrides(prev => ({ ...prev, ...dbOv }));
+        }
         if (j.survey?.title) {
           const surveyTitle = j.survey.title as string;
           setForm(prev => prev ? { ...prev, title: surveyTitle } : prev);
@@ -56,6 +72,58 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
       setTaxonomyFields(demoFields);
     }
   },[surveyId, searchParams]);
+
+  function inferBranchFromRaw(raw: Record<string, unknown>, parsed: ParsedForm): QuestionOverrides {
+    const items = raw.items as unknown[] | undefined;
+    if (!items) return {};
+    const pageBreakIds: string[] = [];
+    for (const it of items as Record<string, unknown>[]) {
+      if ((it as Record<string, unknown>).pageBreakItem !== undefined) {
+        const id = String((it as Record<string, unknown>).itemId || "");
+        if (id) pageBreakIds.push(id);
+      }
+    }
+    // sectionId -> 페이지 인덱스 (pageBreakIds 순서 기반: 0=첫 페이지, 1=첫 브레이크 이후, ...)
+    const sectionToPage = (sid: string): number | null => {
+      const idx = pageBreakIds.indexOf(sid);
+      if (idx >= 0) return idx + 1;
+      return null;
+    };
+    const overrides: QuestionOverrides = {};
+    // 각 questionItem의 choice 옵션 goToSectionId 파싱
+    for (const it of items as Record<string, unknown>[]) {
+      const qi = (it as Record<string, unknown>).questionItem as Record<string, unknown> | undefined;
+      if (!qi) continue;
+      const q = qi.question as Record<string, unknown> | undefined;
+      if (!q) continue;
+      const qId = String(q.questionId || (it as Record<string, unknown>).itemId || "");
+      const cq = q.choiceQuestion as Record<string, unknown> | undefined;
+      if (!cq) continue;
+      const opts = cq.options as { value: string; goToSectionId?: string }[] | undefined;
+      if (!opts || opts.length === 0) continue;
+      const hasBranch = opts.some(o => !!o.goToSectionId);
+      if (!hasBranch) continue;
+      const branchMap: Record<string, number | "END"> = {};
+      for (const o of opts) {
+        if (!o.goToSectionId) continue;
+        // SUBMIT 같은 특수값은 END로, 그 외는 페이지 매핑
+        const sid = String(o.goToSectionId);
+        if (sid.toUpperCase() === "SUBMIT") {
+          branchMap[o.value] = "END";
+        } else {
+          const pageIdx = sectionToPage(sid);
+          if (pageIdx !== null) branchMap[o.value] = pageIdx;
+        }
+      }
+      if (Object.keys(branchMap).length > 0) {
+        // parsed에 해당 질문이 실제로 존재하는지 확인 (지원 유형만)
+        const exists = parsed.questions.some(pq => pq.id === qId);
+        if (!exists) continue;
+        overrides[qId] = { branchEnabled: true, branchMap };
+      }
+    }
+    return overrides;
+  }
 
   function setAns(id: string, v: string | string[]) { setAnswers(a=>({ ...a, [id]: v })); }
   function setTax(key: string, v: string) { setTaxonomyValues(a=>({ ...a, [key]: v })); }
