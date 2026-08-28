@@ -295,7 +295,9 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         // 교육신청서: "동일 교육과정은 중복 신청할 수 없습니다." 뒤 단락 여백
         .replace(/(동일 교육과정은 중복 신청할 수 없습니다\.)\s*\n/g, "$1\n\n")
         // 교육신청서: "모집방법: 선착순" 뒤 단락 여백 (과정별 반복 포함)
-        .replace(/(모집방법:\s*선착순)\s*\n/g, "$1\n\n");
+        .replace(/(모집방법:\s*선착순)\s*\n/g, "$1\n\n")
+        // 고객만족도(산업체): "우수 인재 배출에 반영하고자 실시됩니다." 뒤 단락 여백
+        .replace(/(우수 인재 배출에 반영하고자 실시됩니다\.)\s*\n/g, "$1\n\n");
       const lines = normalized.split("\n");
       const out: React.ReactNode[] = [];
       for (let li = 0; li < lines.length; li++) {
