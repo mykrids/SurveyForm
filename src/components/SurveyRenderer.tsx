@@ -17,6 +17,8 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const [overrides, setOverrides] = useState<QuestionOverrides>({});
   const [branchEnded, setBranchEnded] = useState(false);
   const [email, setEmail] = useState("");
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [duplicateCheckType, setDuplicateCheckType] = useState<string>("none");
   const [status, setStatus] = useState<string>("");
   const [globalPopup, setGlobalPopup] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -68,6 +70,12 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         if (j.survey?.title) {
           const surveyTitle = j.survey.title as string;
           setForm(prev => prev ? { ...prev, title: surveyTitle } : prev);
+        }
+        if (j.survey?.duplicate_check_type) {
+          setDuplicateCheckType(j.survey.duplicate_check_type as string);
+        } else if (surveyId === "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f") {
+          // 강의 평가는 항상 쿠키 기반 (개인정보 수집 없음)
+          setDuplicateCheckType("cookie");
         }
       }).catch(()=>{});
     } else {
@@ -143,6 +151,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     if (globalPopup) setGlobalPopup(null);
   }
 
+  const isCookieMode = duplicateCheckType === "cookie" || surveyId === "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f";
   const emailTypo = email ? checkEmailTypo(email) : null;
 
   function showGlobal(msg: string) { setStatus(msg); setGlobalPopup(msg); }
@@ -181,10 +190,29 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     if (isSubmitting) return;
     clearPopups();
     if (branchEnded) { showGlobal("분기 종료 상태에서는 제출할 수 없습니다. ‘이전’으로 돌아가거나 홈으로 이동하세요."); return; }
-    if (emailTypo && !emailTypo.ok) {
-      const sug = emailTypo.suggestion ? ` → ‘${emailTypo.suggestion}’(으)로 교정해 보세요.` : "";
-      showGlobal(`이메일 오타 차단: ${emailTypo.reason}${sug}`);
-      return;
+    // 이메일/동의 검증 — 강의 평가는 쿠키 기반이므로 이메일/동의 없음, 그 외는 이메일 필수 + 개인정보 동의 필수
+    if (!isCookieMode) {
+      if (!email.trim()) { showGlobal("이메일을 입력해 주세요. 중복 체크와 접수 확인 회신을 위해 필요합니다."); setFieldErrors(prev=> ({...prev, email: "이메일을 입력해 주세요."})); setTimeout(()=> document.getElementById("q-email")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100); return; }
+      if (emailTypo && !emailTypo.ok) {
+        const sug = emailTypo.suggestion ? ` → ‘${emailTypo.suggestion}’(으)로 교정해 보세요.` : "";
+        showGlobal(`이메일 오타 차단: ${emailTypo.reason}${sug}`);
+        setFieldErrors(prev=> ({...prev, email: emailTypo.reason}));
+        setTimeout(()=> document.getElementById("q-email")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+        return;
+      }
+      if (!consentChecked) {
+        showGlobal("개인정보 수집·이용에 동의해 주세요. 중복 체크와 접수 확인 회신을 위해 필요합니다.");
+        setFieldErrors(prev=> ({...prev, consent: "개인정보 수집·이용에 동의해 주세요."}));
+        setTimeout(()=> document.getElementById("q-consent")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+        return;
+      }
+    } else {
+      // 쿠키 기반은 이메일 오타만 있으면 차단 (이메일이 있을 때만)
+      if (email && emailTypo && !emailTypo.ok) {
+        const sug = emailTypo.suggestion ? ` → ‘${emailTypo.suggestion}’(으)로 교정해 보세요.` : "";
+        showGlobal(`이메일 오타 차단: ${emailTypo.reason}${sug}`);
+        return;
+      }
     }
     const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
     if (taxErr) { showGlobal(`분류 오류: ${taxErr}`); return; }
@@ -396,8 +424,16 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
       if (qErr) { setFieldErrorFromMessage(qErr); return; }
     }
     if (page === 0) {
-      const t = checkEmailTypo(email);
-      if (email && t && !t.ok) { showGlobal(`이메일 오타: ${t.reason}`); return; }
+      if (!isCookieMode) {
+        const t = checkEmailTypo(email);
+        if (email && t && !t.ok) { showGlobal(`이메일 오타: ${t.reason}`); return; }
+        // 이메일은 제출 시 필수로 검증, 다음 이동 시에는 오타만 차단
+      } else {
+        if (email) {
+          const t = checkEmailTypo(email);
+          if (t && !t.ok) { showGlobal(`이메일 오타: ${t.reason}`); return; }
+        }
+      }
       const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
       if (taxErr) { showGlobal(`분류 오류: ${taxErr}`); return; }
     }
@@ -435,19 +471,23 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
             ⚠️ 지원되지 않는 문항 {form.unsupported.length}개가 있어 표시하지 않았습니다.
           </div>
         )}
-       {status && !globalPopup && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{status}</p>}
-        <form onSubmit={submit} className="mt-6 space-y-5 border dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
-         <label className="block text-sm dark:text-white">이메일 (중복 체크·확인 메일용)
-           <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className={`mt-1 w-full border rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 ${emailTypo && !emailTypo.ok ? "border-red-300 dark:border-red-700" : "border-zinc-300 dark:border-zinc-700"}`} placeholder="you@example.com" />
-           {emailTypo && !emailTypo.ok ? (
-             <div className="mt-1 text-xs flex items-center gap-2">
-               <span className="text-red-600 dark:text-red-400">⚠️ {emailTypo.reason}</span>
-               {emailTypo.suggestion && <button type="button" onClick={()=>setEmail(emailTypo.suggestion!)} className="underline text-blue-600 dark:text-blue-400">‘{emailTypo.suggestion}’로 교정</button>}
-             </div>
-           ) : emailTypo && emailTypo.ok ? (
-             <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">오타(never.com→naver.com 등) 자동 검사됨 — @ 누락·도메인 오타 시 제출 차단</p>
-           ) : null}
-         </label>
+        {status && !globalPopup && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{status}</p>}
+         <form onSubmit={submit} className="mt-6 space-y-5 border dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
+          {!isCookieMode ? (
+          <label id="q-email" className="block text-sm dark:text-white scroll-mt-24">이메일 (중복 체크·확인 메일용) <span className="text-red-500">*</span>
+            <input type="email" value={email} onChange={e=>{ setEmail(e.target.value); if(fieldErrors.email) setFieldErrors(prev=>{ const n={...prev}; delete n.email; return n; }); if(globalPopup) setGlobalPopup(null); }} className={`mt-1 w-full border rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 ${emailTypo && !emailTypo.ok ? "border-red-300 dark:border-red-700" : fieldErrors.email ? "border-red-300 dark:border-red-700" : "border-zinc-300 dark:border-zinc-700"}`} placeholder="you@example.com" />
+            {emailTypo && !emailTypo.ok ? (
+              <div className="mt-1 text-xs flex items-center gap-2">
+                <span className="text-red-600 dark:text-red-400">⚠️ {emailTypo.reason}</span>
+                {emailTypo.suggestion && <button type="button" onClick={()=>setEmail(emailTypo.suggestion!)} className="underline text-blue-600 dark:text-blue-400">‘{emailTypo.suggestion}’로 교정</button>}
+              </div>
+            ) : fieldErrors.email ? (
+              <div className="mt-1 text-xs text-red-600 dark:text-red-400">⚠️ {fieldErrors.email}</div>
+            ) : <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">오타(never.com→naver.com 등) 자동 검사됨 — @ 누락·도메인 오타 시 제출 차단</p>}
+          </label>
+          ) : (
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 rounded-lg px-3 py-2">이 설문은 <strong>쿠키 기반 중복 체크</strong>로 운영됩니다 — 이메일 없이도 제출 가능하며, 개인정보 수집·이용 동의가 필요 없습니다.</p>
+          )}
          {/* 분류 필드 */}
          {taxonomyFields.map(f=>{
            const isHidden = f.hidden && taxonomyValues[f.key];
@@ -584,11 +624,20 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
               )}
             </div>
           ); })}
+          {!isCookieMode && isLastPage && (
+            <div id="q-consent" className={`border rounded-xl p-4 scroll-mt-24 ${fieldErrors.consent ? "border-red-300 bg-red-50 dark:bg-red-950 dark:border-red-800" : "border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800"}`}>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={consentChecked} onChange={e=>{ setConsentChecked(e.target.checked); setFieldErrors(prev=>{ const n={...prev}; delete n.consent; return n; }); if(globalPopup) setGlobalPopup(null); }} className="mt-1 accent-zinc-900" />
+                <span className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed">중복 체크와 접수 확인 회신으로 위해 이메일 개인정보를 수집·이용하는 것에 동의합니다. <span className="text-red-500">*</span></span>
+              </label>
+              {fieldErrors.consent && <div className="mt-2 text-xs text-red-600 dark:text-red-400">⚠️ {fieldErrors.consent}</div>}
+            </div>
+          )}
         <div className="flex gap-3">
           {page > 0 && <button type="button" onClick={handlePrev} disabled={isSubmitting} className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 py-3 text-sm font-medium dark:text-white disabled:opacity-50">이전</button>}
           {!isLastPage ? <button type="button" onClick={handleNext} disabled={isSubmitting} className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium disabled:opacity-50">다음</button> : <button type="submit" disabled={isSubmitting} className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">{isSubmitting ? <><span className="h-4 w-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" /><span>제출 중…</span></> : "제출하기"}</button>}
         </div>
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center">제출 시 Supabase 기간/중복 검증 → 분류 검증 → GAS write(분류 포함) → Resend 확인 메일 즉시 발송</p>
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center">{isCookieMode ? "제출 시 Supabase 기간/쿠키 중복 검증 → 분류 검증 → GAS write(분류 포함) — 이메일 없이 쿠키로 중복 체크" : "제출 시 Supabase 기간/이메일 중복 검증 → 분류 검증 → GAS write(분류 포함) → Resend 확인 메일 즉시 발송"}</p>
       </form>
       {globalPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={()=> { if (!isSubmitting) setGlobalPopup(null); }}>
