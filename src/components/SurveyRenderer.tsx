@@ -24,10 +24,15 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
 
   useEffect(()=>{
     fetch(`/api/forms/${surveyId}`).then(r=>r.json()).then(j=>{
-      if (j.form) { setForm(j.form); setPage(0); }
-      if (j.warning) setStatus(j.warning);
+      if (j.form) {
+        // 설문 제목은 Supabase surveys.title을 우선 사용 — Google Form의 documentTitle/title이 비어도 Supabase에 저장된 제목으로 표시
+        // 1Ifoy... 처럼 formId 폴백(주소 노출) 방지
+        setForm(j.form); setPage(0);
+      }
+      // 미지원 문항 안내는 배너(form.unsupported)로 이미 표시되므로 status 중복 방지 — 에러성 warning만 상태로 노출
+      if (j.warning && !j.warning.includes("지원되지 않는 문항")) setStatus(j.warning);
     }).catch(()=>setStatus("폼 로드 실패"));
-    // taxonomy + question_overrides meta
+    // taxonomy + question_overrides + title meta
     if (surveyId !== "demo") {
       fetch(`/api/surveys/${surveyId}`).then(r=>r.json()).then(j=>{
         if (j.survey?.taxonomy_fields) {
@@ -41,6 +46,10 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
           if (Object.keys(init).length>0) setTaxonomyValues(init);
         }
         if (j.survey?.question_overrides) setOverrides(j.survey.question_overrides as QuestionOverrides);
+        if (j.survey?.title) {
+          const surveyTitle = j.survey.title as string;
+          setForm(prev => prev ? { ...prev, title: surveyTitle } : prev);
+        }
       }).catch(()=>{});
     } else {
       const demoFields: TaxonomyField[] = [];

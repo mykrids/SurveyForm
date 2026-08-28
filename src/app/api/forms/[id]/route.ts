@@ -61,7 +61,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     }
     const json = await res.json();
     const parsed = parseGoogleFormResponse(formId, json);
-    const warning = parsed.unsupported.length > 0 ? `지원되지 않는 문항 ${parsed.unsupported.length}개는 표시하지 않았습니다 — 순수 선택/단답/장문/척도 외 유형(그리드·순위 등)은 현재 미지원입니다.` : undefined;
+    // 미지원 문항은 form.unsupported 배너로 표시되므로 warning은 생략 — 중복 노출 방지
+    const warning = undefined;
     // question_overrides는 /api/surveys/[id]에서 가져오므로 여기서는 raw만 반환, merge는 클라이언트에서 수행
     return NextResponse.json({ form: parsed, raw: json, warning });
   } catch (e: unknown) {

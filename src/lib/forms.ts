@@ -37,7 +37,7 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
   const info = (apiJson as Record<string, unknown>).info as Record<string, unknown> | undefined;
   const items = (apiJson as Record<string, unknown>).items as unknown[] | undefined;
 
-  const title = (info?.title as string) || (apiJson as Record<string, unknown>).title as string || `설문 ${formId}`;
+  const title = (info?.title as string) || (info?.documentTitle as string) || (apiJson as Record<string, unknown>).title as string || (apiJson as Record<string, unknown>).documentTitle as string || `설문 ${formId}`;
   const description = (info?.description as string) || undefined;
 
   const questions: ParsedQuestion[] = [];
