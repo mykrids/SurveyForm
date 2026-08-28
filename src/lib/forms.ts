@@ -1,7 +1,7 @@
 export type ParsedQuestion = {
   id: string;
   title: string;
-  type: "TEXT" | "PARAGRAPH_TEXT" | "RADIO" | "CHECKBOX" | "UNSUPPORTED";
+  type: "TEXT" | "PARAGRAPH_TEXT" | "RADIO" | "CHECKBOX" | "GRID" | "UNSUPPORTED";
   required: boolean;
   rawType?: string;
   options?: string[];
@@ -11,6 +11,9 @@ export type ParsedQuestion = {
   scaleLowLabel?: string;
   scaleHighLabel?: string;
   maxChoices?: number;
+  // GRID/RANK 전용 — 행렬형(한국식 순위 설문): 행=요인, 열=순위
+  gridColumns?: string[];
+  gridRows?: { id: string; title: string }[];
 };
 
 export type ParsedForm = {
@@ -54,7 +57,7 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
       if (questions.length > 0) sectionBreaks.push(questions.length);
       continue;
     }
-    // questionGroupItem with grid/rowQuestion은 별도 처리 — 행렬형(순위/그리드)는 미지원으로 분류
+    // questionGroupItem with grid/rowQuestion — 한국식 순위/행렬 설문(GRID/RANK) 지원
     const rawGroup = (raw as Record<string, unknown>).questionGroupItem as Record<string, unknown> | undefined;
     if (rawGroup) {
       const titleText = (raw.title as string) || "지원되지 않는 항목";
@@ -62,7 +65,36 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
       const qs = rawGroup.questions as unknown[] | undefined;
       const isGrid = !!grid || (qs && qs.some(q=> (q as Record<string, unknown>).rowQuestion !== undefined));
       if (isGrid) {
-        // 그리드/순위형 — 표시 불가, unsupported로 분류
+        const colsRaw = (grid?.columns as Record<string, unknown> | undefined);
+        const colOpts = (colsRaw?.options as { value: string }[] | undefined)?.map(o=>o.value) || [];
+        const rows: { id: string; title: string }[] = [];
+        let required = false;
+        if (qs) {
+          for (const r of qs as Record<string, unknown>[]) {
+            const rq = r.rowQuestion as Record<string, unknown> | undefined;
+            const rowTitle = (rq?.title as string) || (r.title as string) || "항목";
+            const rowId = String(r.questionId || Math.random());
+            rows.push({ id: rowId, title: rowTitle });
+            if (r.required) required = true;
+          }
+        }
+        // 컬럼이 있고 행이 있으면 GRID로 지원, 아니면 unsupported
+        if (colOpts.length > 0 && rows.length > 0) {
+          const hasRank = JSON.stringify(colOpts).includes("순위");
+          const rawType = hasRank ? "RANK" : "GRID";
+          const gridQ: ParsedQuestion = {
+            id: String(raw.itemId || Math.random()),
+            title: titleText,
+            type: "GRID",
+            required,
+            rawType,
+            gridColumns: colOpts,
+            gridRows: rows,
+          };
+          questions.push(gridQ);
+          continue;
+        }
+        // fallback unsupported
         const hasRank = JSON.stringify(grid?.columns || "").includes("순위");
         const rawType = hasRank ? "RANK" : "GRID";
         const q: ParsedQuestion = { id: String(raw.itemId || Math.random()), title: titleText, type: "UNSUPPORTED", required: false, rawType };

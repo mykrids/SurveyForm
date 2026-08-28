@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (!rl.ok) return NextResponse.json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." }, { status: 429 });
 
   const body = await req.json();
-  const { surveyId, email, answers, taxonomy } = body as { surveyId: string; email?: string; answers: Record<string, string | string[]>; taxonomy?: Record<string, string> };
+  const { surveyId, email, answers, taxonomy } = body as { surveyId: string; email?: string; answers: Record<string, string | string[] | Record<string,string>>; taxonomy?: Record<string, string> };
   if (!surveyId || !answers) return NextResponse.json({ error: "surveyId, answers required" }, { status: 400 });
   const taxonomyValues = taxonomy || {};
 
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
           if (res.ok) {
             const j = await res.json();
             const parsed = parseGoogleFormResponse(formIdForVal, j);
-            parsedQuestions = parsed.questions.map(q => ({ id: q.id, title: q.title, required: q.required, type: q.type }));
+            parsedQuestions = parsed.questions.map(q => ({ id: q.id, title: q.title, required: q.required, type: q.type, gridRows: (q as unknown as { gridRows?: { id: string; title: string }[] }).gridRows }));
           }
         }
       }
@@ -128,10 +128,24 @@ export async function POST(req: NextRequest) {
   const gasUrl = isDemo ? "" : ((survey.gas_webapp_url as string) || process.env.GAS_WEBAPP_URL || "");
   const taxonomyRow: Record<string, string> = {};
   for (const [k, v] of Object.entries(taxonomyValues)) taxonomyRow[`taxonomy_${k}`] = v;
+  // GRID 평탄화: answers[gridId]= {rowId: col} -> rowId 컬럼으로 전개 (시트 호환)
+  const flatAnswersForSheet: Record<string, string> = {};
+  for (const [k, v] of Object.entries(answers)) {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      for (const [rowId, colVal] of Object.entries(v as Record<string,string>)) {
+        flatAnswersForSheet[rowId] = colVal;
+        flatAnswersForSheet[`${k}_${rowId}`] = colVal;
+      }
+    } else if (Array.isArray(v)) {
+      flatAnswersForSheet[k] = (v as string[]).join(", ");
+    } else if (typeof v === "string") {
+      flatAnswersForSheet[k] = v;
+    }
+  }
   const payload = {
     surveyId, email: identifier || email || null,
     answers, taxonomy: taxonomyValues, submittedAt: now.toISOString(),
-    row: { _surveyId: surveyId, _email: identifier || email || "", _submittedAt: now.toISOString(), ...taxonomyRow, ...answers },
+    row: { _surveyId: surveyId, _email: identifier || email || "", _submittedAt: now.toISOString(), ...taxonomyRow, ...flatAnswersForSheet },
   };
 
   if (isDemo) {

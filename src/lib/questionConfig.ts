@@ -152,8 +152,8 @@ export function validateSingleValue(
 }
 
 export function validateAnswers(
-  questions: { id: string; title: string; required: boolean; type: string }[],
-  answers: Record<string, string | string[]>,
+  questions: { id: string; title: string; required: boolean; type: string; gridRows?: { id: string; title: string }[] }[],
+  answers: Record<string, string | string[] | Record<string, string>>,
   overrides: QuestionOverrides | undefined,
   visitedIds?: Set<string>
 ): string | null {
@@ -164,9 +164,20 @@ export function validateAnswers(
     const ov = ensureDefaults(ovRaw);
     const v = answers[q.id];
     const effectiveRequired = ov.required !== null && ov.required !== undefined ? !!ov.required : !!q.required;
+    if (q.type === "GRID") {
+      const rows = (q as { gridRows?: { id: string; title: string }[] }).gridRows || [];
+      const map = (v as Record<string, string> | undefined) || {};
+      if (effectiveRequired) {
+        for (const r of rows) {
+          if (!map[r.id]) return `필수 문항을 입력하세요: ${q.title} - ${r.title}`;
+        }
+      }
+      // 중복 순위 검사 (한국식 순위: 같은 순위를 두 행에 중복 선택 불가 — 필요 시 활성화, 현재는 허용)
+      continue;
+    }
     if (effectiveRequired && isEmpty(v)) return `필수 문항을 입력하세요: ${q.title}`;
     if (!isEmpty(v)) {
-      const err = validateSingleValue(v, ov, q.title);
+      const err = validateSingleValue(v as string | string[] | undefined, ov, q.title);
       if (err) return err;
     }
   }
@@ -207,7 +218,7 @@ export function getNextPageIndex(
   currentPage: number,
   totalPages: number,
   currentQuestions: { id: string }[],
-  answers: Record<string, string | string[]>,
+  answers: Record<string, string | string[] | Record<string,string>>,
   overrides: QuestionOverrides | undefined
 ): number | "END" {
   if (!overrides) return Math.min(currentPage + 1, totalPages - 1);
@@ -215,7 +226,7 @@ export function getNextPageIndex(
     const ov = overrides[q.id];
     if (!ov?.branchEnabled || !ov.branchMap) continue;
     const ans = answers[q.id];
-    const val = Array.isArray(ans) ? ans[0] : ans;
+    const val = Array.isArray(ans) ? ans[0] : (typeof ans === "object" ? undefined : ans as string | undefined);
     if (val && ov.branchMap[val] !== undefined) {
       const target = ov.branchMap[val];
       if (target === "END") return "END";

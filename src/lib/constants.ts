@@ -22,7 +22,7 @@ export const DUPLICATE_CHECK_TYPES = {
 
 export type DuplicateCheckType = keyof typeof DUPLICATE_CHECK_TYPES;
 
-export const SUPPORTED_QUESTION_TYPES = ["TEXT", "PARAGRAPH_TEXT", "RADIO", "CHECKBOX"] as const;
+export const SUPPORTED_QUESTION_TYPES = ["TEXT", "PARAGRAPH_TEXT", "RADIO", "CHECKBOX", "GRID"] as const;
 export type SupportedQuestionType = typeof SUPPORTED_QUESTION_TYPES[number];
 
 export const LANDING_DATA = {
