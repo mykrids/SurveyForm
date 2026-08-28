@@ -20,6 +20,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const [status, setStatus] = useState<string>("");
   const [globalPopup, setGlobalPopup] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [done, setDone] = useState<{ presetLabel: string; presetBody: string } | null>(null);
   const [page, setPage] = useState(0);
   const [visited, setVisited] = useState<Set<number>>(()=> new Set([0]));
@@ -177,6 +178,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (isSubmitting) return;
     clearPopups();
     if (branchEnded) { showGlobal("분기 종료 상태에서는 제출할 수 없습니다. ‘이전’으로 돌아가거나 홈으로 이동하세요."); return; }
     if (emailTypo && !emailTypo.ok) {
@@ -241,23 +243,31 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         // GRID는 행별 독립 평가(1~5순위 각각) — 중복 허용 (10개 항목을 5개 순위로 평가하므로 같은 순위 중복이 정상)
       }
     }
-    setStatus("제출 중…");
+    setIsSubmitting(true);
+    setStatus("제출 중 입니다. 잠시 기다려 주세요.");
+    setGlobalPopup("제출 중 입니다. 잠시 기다려 주세요.");
     const dupKey = `survey_${surveyId}_submitted`;
     if (localStorage.getItem(dupKey)) {
-      showGlobal("이미 제출한 것으로 기록되어 있습니다. (쿠키 기반 — 우회 가능)");
+      // 쿠키 기반 경고는 제출 중 모달과 별개로, 제출 후에도 표시되지만 진행은 계속
+      console.warn("이미 제출한 것으로 기록되어 있습니다. (쿠키 기반 — 우회 가능)");
     }
     const payload = { surveyId, email, answers, taxonomy: taxonomyValues };
-    const r = await fetch("/api/submit", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
-    const j = await r.json();
-    if (!r.ok) {
-      const sug = j.suggestion ? ` → ‘${j.suggestion}’(으)로 교정해 보세요.` : "";
-      showGlobal(`오류: ${j.error}${sug}`);
-      return;
+    try {
+      const r = await fetch("/api/submit", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (!r.ok) {
+        const sug = j.suggestion ? ` → ‘${j.suggestion}’(으)로 교정해 보세요.` : "";
+        showGlobal(`오류: ${j.error}${sug}`);
+        return;
+      }
+      localStorage.setItem(dupKey, "1");
+      document.cookie = `${dupKey}=1; path=/; max-age=31536000`;
+      setDone({ presetLabel: j.presetLabel, presetBody: j.presetBody });
+      setStatus("");
+      setGlobalPopup(null);
+    } finally {
+      setIsSubmitting(false);
     }
-    localStorage.setItem(dupKey, "1");
-    document.cookie = `${dupKey}=1; path=/; max-age=31536000`;
-    setDone({ presetLabel: j.presetLabel, presetBody: j.presetBody });
-    setStatus("");
   }
 
    if (done) {
@@ -569,16 +579,20 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
             </div>
           ); })}
         <div className="flex gap-3">
-          {page > 0 && <button type="button" onClick={handlePrev} className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 py-3 text-sm font-medium dark:text-white">이전</button>}
-          {!isLastPage ? <button type="button" onClick={handleNext} className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium">다음</button> : <button type="submit" className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium">제출하기</button>}
+          {page > 0 && <button type="button" onClick={handlePrev} disabled={isSubmitting} className="flex-1 rounded-full border border-zinc-300 dark:border-zinc-700 py-3 text-sm font-medium dark:text-white disabled:opacity-50">이전</button>}
+          {!isLastPage ? <button type="button" onClick={handleNext} disabled={isSubmitting} className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium disabled:opacity-50">다음</button> : <button type="submit" disabled={isSubmitting} className="flex-1 rounded-full bg-black dark:bg-white dark:text-black text-white py-3 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">{isSubmitting ? <><span className="h-4 w-4 border-2 border-white dark:border-black border-t-transparent rounded-full animate-spin" /><span>제출 중…</span></> : "제출하기"}</button>}
         </div>
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center">제출 시 Supabase 기간/중복 검증 → 분류 검증 → GAS write(분류 포함) → Resend 확인 메일 즉시 발송</p>
       </form>
       {globalPopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={()=> setGlobalPopup(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={()=> { if (!isSubmitting) setGlobalPopup(null); }}>
           <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-2xl p-6 border dark:border-zinc-800 shadow-xl" onClick={e=> e.stopPropagation()}>
             <p className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">{globalPopup}</p>
-            <button onClick={()=> setGlobalPopup(null)} className="mt-5 w-full rounded-full bg-black dark:bg-white dark:text-black text-white py-2.5 text-sm font-medium">확인</button>
+            {isSubmitting && globalPopup.includes("제출 중") ? (
+              <div className="mt-5 flex justify-center"><span className="h-6 w-6 border-2 border-zinc-300 dark:border-zinc-600 border-t-zinc-900 dark:border-t-white rounded-full animate-spin" /></div>
+            ) : (
+              <button onClick={()=> setGlobalPopup(null)} className="mt-5 w-full rounded-full bg-black dark:bg-white dark:text-black text-white py-2.5 text-sm font-medium">확인</button>
+            )}
           </div>
         </div>
       )}
