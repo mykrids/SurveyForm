@@ -7,8 +7,8 @@ import { sendConfirmationEmail } from "@/lib/email";
 import { rateLimit, getClientIp } from "@/lib/rateLimit";
 import { checkEmailTypo } from "@/lib/emailTypo";
 import { validateTaxonomyValues, type TaxonomyField } from "@/lib/taxonomy";
-import { validateAnswers, validateOverrides, type QuestionOverrides } from "@/lib/questionConfig";
-import { parseGoogleFormResponse } from "@/lib/forms";
+import { validateAnswers, validateOverrides, getNextPageIndex, type QuestionOverrides } from "@/lib/questionConfig";
+import { parseGoogleFormResponse, type ParsedForm } from "@/lib/forms";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +71,8 @@ export async function POST(req: NextRequest) {
     if (err) return NextResponse.json({ error: `question_overrides 오류: ${err}` }, { status: 500 });
   }
   // demo는 폼 구조 없이 통과, 그 외는 가능하면 폼 구조를 가져와 검증 (실패 시 통과)
-  let parsedQuestions: { id: string; title: string; required: boolean; type: string }[] | null = null;
+  let parsedForVal: ParsedForm | null = null;
+  let parsedQuestions: { id: string; title: string; required: boolean; type: string; gridRows?: { id: string; title: string }[] }[] | null = null;
   if (isDemoEarly) {
     parsedQuestions = null;
   } else {
@@ -92,13 +93,98 @@ export async function POST(req: NextRequest) {
           if (res.ok) {
             const j = await res.json();
             const parsed = parseGoogleFormResponse(formIdForVal, j);
+            parsedForVal = parsed;
             parsedQuestions = parsed.questions.map(q => ({ id: q.id, title: q.title, required: q.required, type: q.type, gridRows: (q as unknown as { gridRows?: { id: string; title: string }[] }).gridRows }));
+            // 구글 폼의 goToSectionId 분기 자동 추론 — DB question_overrides가 비어있어도 건너뛴 문항 검증 제외 (실수 방지)
+            if (Object.keys(questionOverrides).length === 0 && j.items) {
+              const inferred = inferBranchFromRaw(j as Record<string, unknown>, parsed);
+              if (Object.keys(inferred).length > 0) {
+                Object.assign(questionOverrides as Record<string, unknown>, inferred);
+              }
+            }
           }
         }
       }
     } catch { /* 검증 스킵 */ }
   }
-  if (parsedQuestions) {
+  // 분기 도달 가능 페이지만 검증 — 건너뛴 문항(예: 2~13번)은 제외하여 2번 필수 오류 방지
+  function inferBranchFromRaw(raw: Record<string, unknown>, parsed: ParsedForm): QuestionOverrides {
+    const items = raw.items as unknown[] | undefined;
+    if (!items) return {};
+    const pageBreakIds: string[] = [];
+    for (const it of items as Record<string, unknown>[]) {
+      if ((it as Record<string, unknown>).pageBreakItem !== undefined) {
+        const id = String((it as Record<string, unknown>).itemId || "");
+        if (id) pageBreakIds.push(id);
+      }
+    }
+    const sectionToPage = (sid: string): number | null => {
+      const idx = pageBreakIds.indexOf(sid);
+      return idx >= 0 ? idx + 1 : null;
+    };
+    const overrides: QuestionOverrides = {};
+    for (const it of items as Record<string, unknown>[]) {
+      const qi = (it as Record<string, unknown>).questionItem as Record<string, unknown> | undefined;
+      if (!qi) continue;
+      const q = qi.question as Record<string, unknown> | undefined;
+      if (!q) continue;
+      const qId = String(q.questionId || (it as Record<string, unknown>).itemId || "");
+      const cq = q.choiceQuestion as Record<string, unknown> | undefined;
+      if (!cq) continue;
+      const opts = cq.options as { value: string; goToSectionId?: string }[] | undefined;
+      if (!opts?.some(o=> !!o.goToSectionId)) continue;
+      const branchMap: Record<string, number | "END"> = {};
+      for (const o of opts) {
+        if (!o.goToSectionId) continue;
+        const sid = String(o.goToSectionId);
+        if (sid.toUpperCase() === "SUBMIT") branchMap[o.value] = "END";
+        else {
+          const pageIdx = sectionToPage(sid);
+          if (pageIdx !== null) branchMap[o.value] = pageIdx;
+        }
+      }
+      if (Object.keys(branchMap).length > 0 && parsed.questions.some(pq=> pq.id===qId)) {
+        overrides[qId] = { branchEnabled: true, branchMap };
+      }
+    }
+    return overrides;
+  }
+  if (parsedQuestions && parsedForVal) {
+    // reachable 페이지 시뮬레이션으로 건너뛴 문항 제외
+    const breaks = parsedForVal.sectionBreaks;
+    const allPages: typeof parsedQuestions[] = (() => {
+      if (breaks && breaks.length > 0) {
+        const points = [0, ...breaks, parsedForVal!.questions.length];
+        return points.slice(0, -1).map((s, i) => parsedForVal!.questions.slice(s, points[i+1]).map(q=> ({ id: q.id, title: q.title, required: q.required, type: q.type, gridRows: (q as unknown as { gridRows?: { id: string; title: string }[] }).gridRows })) as typeof parsedQuestions);
+      }
+      const chunk = 5;
+      const res: typeof parsedQuestions[] = [];
+      for (let i = 0; i < parsedQuestions!.length; i += chunk) res.push(parsedQuestions!.slice(i, i+chunk) as typeof parsedQuestions);
+      return res.length ? res : [parsedQuestions!];
+    })();
+    const total = allPages.length;
+    const reachable = new Set<number>();
+    let cur = 0;
+    reachable.add(0);
+    for (let loop = 0; loop < total*2; loop++) {
+      if (cur >= total-1) break;
+      const qs = allPages[cur] || [];
+      const nxt = getNextPageIndex(cur, total, qs.map(q=>({id:q.id})), answers, questionOverrides);
+      if (nxt === "END") break;
+      const nextIdx = typeof nxt === "number" ? nxt : cur+1;
+      if (nextIdx <= cur || nextIdx >= total) break;
+      reachable.add(nextIdx);
+      cur = nextIdx;
+    }
+    // 현재 도달한 마지막 페이지도 포함 (사용자가 14번 이후에 있으므로)
+    // reachable은 이미 분기로 도달한 페이지들을 포함하므로, visited 대신 reachable로 검증
+    const visitedIds = new Set<string>();
+    for (const pIdx of reachable) {
+      for (const qq of (allPages[pIdx] || [])) visitedIds.add(qq.id);
+    }
+    const qErr = validateAnswers(parsedQuestions, answers, questionOverrides, visitedIds);
+    if (qErr) return NextResponse.json({ error: qErr }, { status: 400 });
+  } else if (parsedQuestions) {
     const qErr = validateAnswers(parsedQuestions, answers, questionOverrides);
     if (qErr) return NextResponse.json({ error: qErr }, { status: 400 });
   }
