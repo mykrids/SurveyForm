@@ -18,6 +18,8 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const [branchEnded, setBranchEnded] = useState(false);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<string>("");
+  const [globalPopup, setGlobalPopup] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState<{ presetLabel: string; presetBody: string } | null>(null);
   const [page, setPage] = useState(0);
   const [visited, setVisited] = useState<Set<number>>(()=> new Set([0]));
@@ -125,30 +127,67 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     return overrides;
   }
 
-  function setAns(id: string, v: string | string[] | Record<string,string>) { setAnswers(a=>({ ...a, [id]: v })); }
+  function setAns(id: string, v: string | string[] | Record<string,string>) {
+    setAnswers(a=>({ ...a, [id]: v }));
+    setFieldErrors(prev=>{ if(!prev[id]) return prev; const n={...prev}; delete n[id]; return n; });
+    if (globalPopup) setGlobalPopup(null);
+  }
   function setTax(key: string, v: string) { setTaxonomyValues(a=>({ ...a, [key]: v })); }
   function setGridAns(gridId: string, rowId: string, col: string) {
     setAnswers(a=>{
       const cur = (a[gridId] as Record<string,string> | undefined) || {};
       return { ...a, [gridId]: { ...cur, [rowId]: col } };
     });
+    setFieldErrors(prev=>{ if(!prev[gridId]) return prev; const n={...prev}; delete n[gridId]; return n; });
+    if (globalPopup) setGlobalPopup(null);
   }
 
   const emailTypo = email ? checkEmailTypo(email) : null;
 
+  function showGlobal(msg: string) { setStatus(msg); setGlobalPopup(msg); }
+  function clearPopups() { setStatus(""); setGlobalPopup(null); setFieldErrors({}); }
+  function setFieldErrorFromMessage(msg: string) {
+    if (!form) { showGlobal(msg); return; }
+    // "필수 문항을 입력하세요: 제목" 또는 "‘제목’은(는) ..." 에서 제목 추출
+    const m = msg.match(/:\s*(.+)$/) || msg.match(/‘(.+?)’/);
+    const title = m ? m[1].trim() : "";
+    let targetId: string | null = null;
+    if (title) {
+      const hit = form.questions.find(q => q.title === title || q.title.includes(title) || title.includes(q.title));
+      if (hit) targetId = hit.id;
+      // GRID 행 제목인 경우 부모 GRID id 찾기
+      if (!targetId) {
+        for (const q of form.questions) {
+          if (q.type === "GRID" && q.gridRows) {
+            const rowHit = q.gridRows.find(r => r.title === title || title.includes(r.title));
+            if (rowHit) { targetId = q.id; break; }
+          }
+        }
+      }
+    }
+    if (targetId) {
+      setFieldErrors(prev => ({ ...prev, [targetId!]: msg }));
+      // 해당 문항으로 스크롤 (가리지 않게 상단 여백)
+      setTimeout(()=>{
+        document.getElementById(`q-${targetId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 100);
+    }
+    showGlobal(msg);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (branchEnded) { setStatus("분기 종료 상태에서는 제출할 수 없습니다. ‘이전’으로 돌아가거나 홈으로 이동하세요."); return; }
+    clearPopups();
+    if (branchEnded) { showGlobal("분기 종료 상태에서는 제출할 수 없습니다. ‘이전’으로 돌아가거나 홈으로 이동하세요."); return; }
     if (emailTypo && !emailTypo.ok) {
       const sug = emailTypo.suggestion ? ` → ‘${emailTypo.suggestion}’(으)로 교정해 보세요.` : "";
-      setStatus(`이메일 오타 차단: ${emailTypo.reason}${sug}`);
+      showGlobal(`이메일 오타 차단: ${emailTypo.reason}${sug}`);
       return;
     }
     const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
-    if (taxErr) { setStatus(`분류 오류: ${taxErr}`); return; }
-    // 문항 검증 (필수/검증 프리셋) — 방문한 페이지만 검증 (분기 스킵 문항은 제외)
+    if (taxErr) { showGlobal(`분류 오류: ${taxErr}`); return; }
+    // 문항 검증 (필수/검증 프리셋) — 분기 스킵 문항은 제외 (실수 방지: visited 대신 분기 시뮬레이션으로 도달 가능한 페이지만 검증)
     if (form) {
-      const visitedIds = new Set<string>();
       const breaks = (form as ParsedForm).sectionBreaks;
       const allPages: ParsedForm["questions"][] = (() => {
         if (breaks && breaks.length > 0) {
@@ -160,13 +199,33 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         for (let i = 0; i < form.questions.length; i += chunk) res.push(form.questions.slice(i, i + chunk));
         return res.length ? res : [form.questions];
       })();
-      for (const pIdx of visited) {
+      const total = allPages.length;
+      // 분기 도달 가능 페이지 계산 — branching answers에 따라 건너뛴 페이지 제외 (실사용 필수 검증 방지)
+      const reachable = new Set<number>();
+      let cur = 0;
+      reachable.add(0);
+      const maxLoop = total * 2;
+      for (let loop = 0; loop < maxLoop; loop++) {
+        if (cur >= total - 1) break;
+        const qs = allPages[cur] || [];
+        const nxt = getNextPageIndex(cur, total, qs.map(q=>({id:q.id})), answers, overrides);
+        if (nxt === "END") break;
+        const nextIdx = typeof nxt === "number" ? nxt : cur + 1;
+        if (nextIdx <= cur) break;
+        if (nextIdx >= total) break;
+        // cur+1 .. nextIdx-1 은 분기로 건너뛰므로 도달 불가 — visited에 있어도 제외
+        reachable.add(nextIdx);
+        cur = nextIdx;
+      }
+      // 현재 페이지도 포함 (사용자가 직접 이동한 경우)
+      reachable.add(page);
+      // visited와 교집합이 아닌 reachable만으로 검증 — 건너뛴 페이지는 visited에 있어도 제외되어 3번 문항 오류 방지
+      const visitedIds = new Set<string>();
+      for (const pIdx of reachable) {
         for (const qq of (allPages[pIdx] || [])) visitedIds.add(qq.id);
       }
-      // 현재 페이지도 포함
-      for (const qq of currentQuestions) visitedIds.add(qq.id);
       const qErr = validateAnswers(form.questions.map(q=>({ id:q.id, title:q.title, required:q.required, type:q.type, gridRows: q.gridRows })), answers, overrides, visitedIds);
-      if (qErr) { setStatus(qErr); return; }
+      if (qErr) { setFieldErrorFromMessage(qErr); return; }
     }
     // 체크박스 최대 선택 수 검증 (구글폼 "최대 3개" 대응 — Forms API는 검증 규칙을 노출하지 않아 제목으로 유추)
     if (form) {
@@ -174,7 +233,8 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         if (q.type === "CHECKBOX" && q.maxChoices) {
           const arr = (answers[q.id] as string[]) || [];
           if (arr.length > q.maxChoices) {
-            setStatus(`‘${q.title}’은(는) 최대 ${q.maxChoices}개까지 선택 가능합니다. (${arr.length}/${q.maxChoices})`);
+            const msg = `‘${q.title}’은(는) 최대 ${q.maxChoices}개까지 선택 가능합니다. (${arr.length}/${q.maxChoices})`;
+            setFieldErrorFromMessage(msg);
             return;
           }
         }
@@ -184,14 +244,14 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     setStatus("제출 중…");
     const dupKey = `survey_${surveyId}_submitted`;
     if (localStorage.getItem(dupKey)) {
-      setStatus("이미 제출한 것으로 기록되어 있습니다. (쿠키 기반 — 우회 가능)");
+      showGlobal("이미 제출한 것으로 기록되어 있습니다. (쿠키 기반 — 우회 가능)");
     }
     const payload = { surveyId, email, answers, taxonomy: taxonomyValues };
     const r = await fetch("/api/submit", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
     const j = await r.json();
     if (!r.ok) {
       const sug = j.suggestion ? ` → ‘${j.suggestion}’(으)로 교정해 보세요.` : "";
-      setStatus(`오류: ${j.error}${sug}`);
+      showGlobal(`오류: ${j.error}${sug}`);
       return;
     }
     localStorage.setItem(dupKey, "1");
@@ -301,13 +361,15 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const totalPages = pages.length;
 
   function handleNext() {
+    clearPopups();
     // 체크박스 최대 선택 수 먼저 (기존 로직 유지)
     for (const q of currentQuestions) {
       const v = answers[q.id];
       if (q.type === "CHECKBOX" && q.maxChoices) {
         const arr = (v as string[]) || [];
         if (arr.length > q.maxChoices) {
-          setStatus(`‘${q.title}’은(는) 최대 ${q.maxChoices}개까지 선택 가능합니다. (${arr.length}/${q.maxChoices})`);
+          const msg = `‘${q.title}’은(는) 최대 ${q.maxChoices}개까지 선택 가능합니다. (${arr.length}/${q.maxChoices})`;
+          setFieldErrorFromMessage(msg);
           return;
         }
       }
@@ -315,22 +377,22 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     // 문항 검증 (필수/검증 프리셋) — 현재 페이지 문항만
     {
       const qErr = validateAnswers(currentQuestions.map(q=>({ id:q.id, title:q.title, required:q.required, type:q.type, gridRows: (q as ParsedForm["questions"][number]).gridRows })), answers, overrides);
-      if (qErr) { setStatus(qErr); return; }
+      if (qErr) { setFieldErrorFromMessage(qErr); return; }
     }
     if (page === 0) {
       const t = checkEmailTypo(email);
-      if (email && t && !t.ok) { setStatus(`이메일 오타: ${t.reason}`); return; }
+      if (email && t && !t.ok) { showGlobal(`이메일 오타: ${t.reason}`); return; }
       const taxErr = validateTaxonomyValues(taxonomyFields, taxonomyValues);
-      if (taxErr) { setStatus(`분류 오류: ${taxErr}`); return; }
+      if (taxErr) { showGlobal(`분류 오류: ${taxErr}`); return; }
     }
     // 조건부 분기
     const next = getNextPageIndex(page, totalPages, currentQuestions.map(q=>({ id: q.id })), answers, overrides);
     if (next === "END") {
       setBranchEnded(true);
-      setStatus("선택하신 응답에 따라 설문이 종료되었습니다. 제출하지 않고 종료하려면 홈으로 이동하세요 — 제출하려면 마지막 페이지로 이동해 제출하세요.");
+      showGlobal("선택하신 응답에 따라 설문이 종료되었습니다. 제출하지 않고 종료하려면 홈으로 이동하세요 — 제출하려면 마지막 페이지로 이동해 제출하세요.");
       return;
     }
-    setStatus("");
+    clearPopups();
     setBranchEnded(false);
     const target = typeof next === "number" ? next : page;
     if (typeof next === "number" && next !== page + 1) {
@@ -342,7 +404,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function handlePrev() {
-    setStatus("");
+    clearPopups();
     setBranchEnded(false);
     setPage(p => Math.max(p - 1, 0));
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -352,12 +414,12 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
        <div className="mx-auto max-w-[816px] w-full px-6 py-8" style={{maxWidth:816}}>
          <h1 className="text-2xl font-bold dark:text-white">{form.title}</h1>
          {form.description && <div className="text-sm text-zinc-600 dark:text-zinc-300 mt-2 whitespace-pre-wrap leading-relaxed space-y-1">{renderDesc(form.description)}</div>}
-        {form.unsupported.length>0 && (
+         {form.unsupported.length>0 && (
           <div className="mt-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-sm text-amber-800 dark:text-amber-200">
             ⚠️ 지원되지 않는 문항 {form.unsupported.length}개가 있어 표시하지 않았습니다.
           </div>
         )}
-       {status && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{status}</p>}
+       {status && !globalPopup && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{status}</p>}
         <form onSubmit={submit} className="mt-6 space-y-5 border dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900">
          <label className="block text-sm dark:text-white">이메일 (중복 체크·확인 메일용)
            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className={`mt-1 w-full border rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400 ${emailTypo && !emailTypo.ok ? "border-red-300 dark:border-red-700" : "border-zinc-300 dark:border-zinc-700"}`} placeholder="you@example.com" />
@@ -418,7 +480,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
             const ovEff = ensureDefaults(overrides[q.id]);
             const effReq = ovEff.required !== null ? !!ovEff.required : !!q.required;
             return (
-            <div key={q.id} className="border-t pt-4 first:border-0 first:pt-0">
+            <div key={q.id} id={`q-${q.id}`} className="border-t pt-4 first:border-0 first:pt-0 scroll-mt-24">
               <label className="text-sm font-medium dark:text-white">{q.title} {effReq && <span className="text-red-500">*</span>}</label>
              {q.description && <p className="text-xs text-zinc-500 dark:text-zinc-400">{q.description}</p>}
               {q.type==="TEXT" && (()=>{ const ovEff=ensureDefaults(overrides[q.id]); const effReq=ovEff.required!==null?!!ovEff.required:!!q.required; return <input value={(answers[q.id] as string)||""} onChange={e=>setAns(q.id, e.target.value)} required={effReq} className="mt-2 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white" placeholder="단답형" />;})()}
@@ -498,6 +560,12 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
                   </div>
                 );
               })()}
+              {fieldErrors[q.id] && (
+                <div className="mt-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 text-xs text-red-700 dark:text-red-300 flex items-start gap-2">
+                  <span>⚠️</span><span className="flex-1">{fieldErrors[q.id]}</span>
+                  <button type="button" onClick={()=> setFieldErrors(prev=>{ const n={...prev}; delete n[q.id]; return n; })} className="ml-2 text-red-500 hover:text-red-700">✕</button>
+                </div>
+              )}
             </div>
           ); })}
         <div className="flex gap-3">
@@ -506,6 +574,14 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         </div>
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400 text-center">제출 시 Supabase 기간/중복 검증 → 분류 검증 → GAS write(분류 포함) → Resend 확인 메일 즉시 발송</p>
       </form>
+      {globalPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={()=> setGlobalPopup(null)}>
+          <div className="max-w-md w-full bg-white dark:bg-zinc-900 rounded-2xl p-6 border dark:border-zinc-800 shadow-xl" onClick={e=> e.stopPropagation()}>
+            <p className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed whitespace-pre-wrap">{globalPopup}</p>
+            <button onClick={()=> setGlobalPopup(null)} className="mt-5 w-full rounded-full bg-black dark:bg-white dark:text-black text-white py-2.5 text-sm font-medium">확인</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
