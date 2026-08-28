@@ -94,6 +94,15 @@ export function checkEmailTypo(email: string): EmailTypoResult {
   if (!domainRaw) return { ok: false, reason: "‘@’ 뒤의 도메인이 비어 있습니다." };
   const domain = domainRaw.toLowerCase();
 
+  // 0) 정확히 허용 도메인이면 즉시 통과 — naver.com vs nate.com(거리 2) 같은 정상 도메인끼리 오탐 방지
+  if (COMMON_DOMAINS.includes(domain)) {
+    const emailRe = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
+    if (!emailRe.test(trimmed)) {
+      return { ok: false, reason: "이메일 형식이 올바르지 않습니다. 예: example@naver.com" };
+    }
+    return { ok: true };
+  }
+
   // 1) 명시적 오타 매핑 우선
   if (TYPO_MAP[domain]) {
     const correct = TYPO_MAP[domain];

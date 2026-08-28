@@ -132,13 +132,43 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     if (!form) return <div className="mx-auto max-w-[816px] w-full px-6 py-16 text-center text-zinc-500 dark:text-zinc-400" style={{maxWidth:816}}>설문 로딩 중…</div>;
 
     function renderDesc(text: string) {
-      return text.split("\n").map((line, li) => {
+      // 강의 평가 템플릿처럼 단락 구분: \n\n 유지 + 대학 행사 템플릿은 조사 대상/소요 시간/익명성 보장 앞에 단락 공백 주입
+      const normalized = text.replace(/\r\n/g, "\n")
+        .replace(/\n(?=조사 대상\s*:)/g, "\n\n")
+        .replace(/\n(?=소요 시간\s*:)/g, "\n")
+        .replace(/\n(?=익명성 보장\s*:)/g, "\n")
+        .replace(/(익명성 보장\s*:[^\n]*)\n(?=바쁘)/g, "$1\n\n");
+      const lines = normalized.split("\n");
+      const out: React.ReactNode[] = [];
+      for (let li = 0; li < lines.length; li++) {
+        const line = lines[li];
         const trimmed = line.trim();
-        if (!trimmed) return <div key={li} className="h-2" />;
+        if (!trimmed) { out.push(<div key={li} className="h-3" />); continue; }
+        // 조사 대상 / 소요 시간 / 익명성 보장 명시적 볼드 매핑
+        const boldTargets = ["조사 대상", "소요 시간", "익명성 보장"];
         const parts = line.split(/(\*\*.*?\*\*)/g);
         const nodes: React.ReactNode[] = (parts as string[]).flatMap((p: string, i: number): React.ReactNode[] => {
-          if (p.startsWith("**") && p.endsWith("**")) return [<strong key={`${i}-b`} className="font-semibold text-zinc-900 dark:text-white">{p.slice(2, -2)}</strong>];
-          if (p.match(/^\[.*\]$/)) return [<strong key={`${i}-br`} className="font-semibold text-zinc-900 dark:text-white">{p}</strong>];
+          if (p.startsWith("**") && p.endsWith("**")) return [<strong key={`${li}-${i}-b`} className="font-semibold text-zinc-900 dark:text-white">{p.slice(2, -2)}</strong>];
+          if (p.match(/^\[.*\]$/)) return [<strong key={`${li}-${i}-br`} className="font-semibold text-zinc-900 dark:text-white">{p}</strong>];
+          // 명시적 3키워드 먼저 볼드 치환
+          for (const kw of boldTargets) {
+            if (p.includes(kw)) {
+              const segs = p.split(kw);
+              const res: React.ReactNode[] = [];
+              for (let k = 0; k < segs.length; k++) {
+                if (k > 0) res.push(<strong key={`${li}-${i}-kw-${k}`} className="font-semibold text-zinc-900 dark:text-white">{kw}</strong>);
+                if (segs[k]) {
+                  // 남은 콜론 전 볼드 로직은 아래에서 처리하므로 일단 span으로
+                  res.push(<span key={`${li}-${i}-seg-${k}`}>{segs[k]}</span>);
+                }
+              }
+              // segs 내부에 :가 있으면 이후 colon 로직에서 다시 볼드될 수 있으니 일단 반환 (중복 볼드 방지 위해 kw는 이미 볼드)
+              // 간단히 colon 로직 스킵하고 res 반환
+              // 하지만 : 뒤 텍스트가 있으면 그대로 둠
+              // colons가 segs에 포함된 경우 추가 처리 불필요 — kw가 이미 볼드이므로 그대로
+              return res;
+            }
+          }
           if (p.includes(":")) {
             const segs: React.ReactNode[] = [];
             let rest: string = p;
@@ -151,21 +181,22 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
               const lastSep = Math.max(beforeTrim.lastIndexOf(" "), beforeTrim.lastIndexOf("~"), beforeTrim.lastIndexOf("("));
               const prefix = lastSep >= 0 ? beforeTrim.slice(lastSep + 1).trim() : beforeTrim.trim();
               const head = lastSep >= 0 ? before.slice(0, lastSep + 1) : "";
-              if (prefix.length >= 1 && prefix.length <= 10 && !prefix.includes("http") && !prefix.includes("//")) {
-                segs.push(<span key={`${i}-${si++}`}>{head}<strong className="font-semibold text-zinc-900 dark:text-white">{prefix}</strong>:</span>);
+              if (prefix.length >= 1 && prefix.length <= 12 && !prefix.includes("http") && !prefix.includes("//")) {
+                segs.push(<span key={`${li}-${i}-${si++}`}>{head}<strong className="font-semibold text-zinc-900 dark:text-white">{prefix}</strong>:</span>);
               } else {
-                segs.push(<span key={`${i}-${si++}`}>{before}:</span>);
+                segs.push(<span key={`${li}-${i}-${si++}`}>{before}:</span>);
               }
               rest = afterColon;
               if (rest === "") break;
             }
-            if (rest) segs.push(<span key={`${i}-${si++}`}>{rest}</span>);
+            if (rest) segs.push(<span key={`${li}-${i}-${si++}`}>{rest}</span>);
             return segs as React.ReactNode[];
           }
-          return [<span key={i}>{p}</span>];
+          return [<span key={`${li}-${i}`}>{p}</span>];
         });
-        return <div key={li}>{nodes}</div>;
-      });
+        out.push(<div key={li}>{nodes}</div>);
+      }
+      return out;
     }
 
   // 페이지네이션: 섹션이 있으면 섹션 우선, 없으면 5문항씩

@@ -54,12 +54,34 @@ export function parseGoogleFormResponse(formId: string, apiJson: Record<string, 
       if (questions.length > 0) sectionBreaks.push(questions.length);
       continue;
     }
+    // questionGroupItem with grid/rowQuestion은 별도 처리 — 행렬형(순위/그리드)는 미지원으로 분류
+    const rawGroup = (raw as Record<string, unknown>).questionGroupItem as Record<string, unknown> | undefined;
+    if (rawGroup) {
+      const titleText = (raw.title as string) || "지원되지 않는 항목";
+      const grid = rawGroup.grid as Record<string, unknown> | undefined;
+      const qs = rawGroup.questions as unknown[] | undefined;
+      const isGrid = !!grid || (qs && qs.some(q=> (q as Record<string, unknown>).rowQuestion !== undefined));
+      if (isGrid) {
+        // 그리드/순위형 — 표시 불가, unsupported로 분류
+        const hasRank = JSON.stringify(grid?.columns || "").includes("순위");
+        const rawType = hasRank ? "RANK" : "GRID";
+        const q: ParsedQuestion = { id: String(raw.itemId || Math.random()), title: titleText, type: "UNSUPPORTED", required: false, rawType };
+        unsupported.push(q);
+        continue;
+      }
+    }
     const questionItem = (raw.questionItem || raw.questionGroupItem || raw) as Record<string, unknown>;
     const question = questionItem.question as Record<string, unknown> | undefined;
     if (!question) {
       // image, video 등 -> unsupported
       const titleText = (raw.title as string) || "지원되지 않는 항목";
-      const q: ParsedQuestion = { id: String(raw.itemId || Math.random()), title: titleText, type: "UNSUPPORTED", required: false, rawType: String(raw.kind || "UNKNOWN") };
+      // UNKNOWN 대신 실제 아이템 힌트로 rawType 추정
+      let hint = String(raw.kind || "");
+      if ((raw as Record<string, unknown>).imageItem !== undefined) hint = "IMAGE";
+      else if ((raw as Record<string, unknown>).videoItem !== undefined) hint = "VIDEO";
+      else if ((raw as Record<string, unknown>).textItem !== undefined) hint = "TEXT_ITEM";
+      else hint = hint || "UNKNOWN";
+      const q: ParsedQuestion = { id: String(raw.itemId || Math.random()), title: titleText, type: "UNSUPPORTED", required: false, rawType: hint };
       unsupported.push(q);
       continue;
     }
