@@ -577,7 +577,12 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
         </div>
         {selectedIds.size>0 && <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">종료된 설문만 선택 가능 — 체크된 항목은 제목 앞에 ✓ 표시</p>}
         <div className="mt-3 grid md:grid-cols-12 gap-2">
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="검색: 제목 / ID / Form ID" className="md:col-span-7 border border-zinc-300 dark:border-zinc-700 rounded-full px-4 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400" />
+          <div className="md:col-span-7 relative">
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="검색: 제목 / ID / Form ID" className="w-full border border-zinc-300 dark:border-zinc-700 rounded-full pl-4 pr-8 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400" />
+            {search && (
+              <button onClick={()=>setSearch("")} aria-label="검색어 지우기" className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-600 flex items-center justify-center text-sm leading-none">×</button>
+            )}
+          </div>
           <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value as typeof statusFilter)} className="md:col-span-3 border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-2 text-sm bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white">
             <option value="all">전체</option>
             <option value="active">진행중</option>
@@ -587,6 +592,13 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           </select>
           <span className="md:col-span-2 text-xs text-zinc-500 dark:text-zinc-400 self-center text-right">{totalPages} 페이지 중 {listPage}</span>
         </div>
+        {(search || statusFilter!=="all") && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {search && <span className="inline-flex items-center gap-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 border dark:border-zinc-700 rounded-full pl-3 pr-1 py-1">검색: “{search}” <button onClick={()=>setSearch("")} className="h-5 w-5 rounded-full bg-white dark:bg-zinc-700 border dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 flex items-center justify-center leading-none">×</button></span>}
+            {statusFilter!=="all" && <span className="inline-flex items-center gap-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 border dark:border-zinc-700 rounded-full pl-3 pr-1 py-1">상태: {statusFilter==="active"?"진행중":statusFilter==="ended"?"종료됨":statusFilter==="draft"?"초안":statusFilter==="demo"?"데모템플릿":statusFilter} <button onClick={()=>setStatusFilter("all")} className="h-5 w-5 rounded-full bg-white dark:bg-zinc-700 border dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 flex items-center justify-center leading-none">×</button></span>}
+            <button onClick={()=>{ setSearch(""); setStatusFilter("all"); }} className="text-xs underline text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">필터 모두 제거 (Clear Filters)</button>
+          </div>
+        )}
         <div className="mt-4 grid gap-3">
           {paged.map(s=>{
             const end = s.end_at ? new Date(s.end_at) : null;
@@ -626,7 +638,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
               </div>
             </div>
           );})}
-          {!loading && filtered.length===0 && <p className="text-sm text-zinc-600 dark:text-zinc-400 text-center py-6">검색 결과가 없습니다 — 검색어/필터를 변경하세요.</p>}
+          {!loading && filtered.length===0 && <div className="text-center py-6"><p className="text-sm text-zinc-600 dark:text-zinc-400">검색 결과가 없습니다 — No Results. No surveys match the current filters.</p><button onClick={()=>{ setSearch(""); setStatusFilter("all"); }} className="mt-2 text-xs rounded-full border border-zinc-300 dark:border-zinc-700 px-4 py-1.5 bg-white dark:bg-zinc-900 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition">Clear Filters — 필터 초기화</button></div>}
           {!loading && surveys.length===0 && <p className="text-sm text-zinc-600 dark:text-zinc-400">아직 설문이 없습니다. 설정 탭에서 생성하세요.</p>}
         </div>
         {totalPages > 1 && (
