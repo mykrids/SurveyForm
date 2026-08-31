@@ -99,6 +99,17 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
     setLoading(false);
   }
   useEffect(()=>{ load(); },[]);
+  // 해시로 탭 직접 이동 — 메뉴 찾기 쉽게 /admin#list
+  useEffect(()=>{
+    const h = window.location.hash.replace("#","") as Tab;
+    if (h==="settings"||h==="edit"||h==="list") setActiveTab(h);
+  },[]);
+  function clearAllFilters() {
+    setSearch("");
+    setStatusFilter("all");
+    setListPage(1);
+    setSelectedIds(new Set());
+  }
 
   function addTaxonomy() {
     const label = newTaxLabel.trim();
@@ -293,22 +304,22 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
         <span className="text-xs text-zinc-500 dark:text-zinc-400">{surveys.length}개 설문</span>
       </div>
 
-      {/* 탭 메뉴 */}
-      <div className="mt-6 flex gap-1 p-1 bg-zinc-100 dark:bg-zinc-800 rounded-full w-fit">
+      {/* 탭 메뉴 — sticky + hash 지원으로 찾기 쉽게 */}
+      <div id="admin-tabs" className="mt-6 flex gap-1 p-1.5 bg-zinc-900 dark:bg-zinc-800 rounded-2xl w-fit sticky top-2 z-10 shadow-lg border border-zinc-700/20">
         {[
           { id: "settings", label: "① 설문 설정", desc: "제목·기간·분류" },
           { id: "edit", label: "② 설문 편집", desc: "필수·검증·분기" },
           { id: "list", label: "③ 등록 목록", desc: `(${surveys.length})` },
         ].map(t=>(
-          <button key={t.id} onClick={()=>setActiveTab(t.id as Tab)} className={`px-5 py-2 rounded-full text-sm font-medium transition ${activeTab===t.id ? "bg-white dark:bg-zinc-900 shadow text-zinc-900 dark:text-white" : "text-zinc-600 dark:text-zinc-400 hover:text-amber-700 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950"}`}>
-            {t.label} <span className="text-xs font-normal hidden md:inline">{t.desc}</span>
+          <button key={t.id} onClick={()=>{ setActiveTab(t.id as Tab); history.replaceState(null,"",`#${t.id}`); }} className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition ${activeTab===t.id ? "bg-white dark:bg-white text-zinc-900 shadow" : "text-zinc-400 hover:text-white hover:bg-white/10"}`}>
+            {t.label} <span className="text-xs font-normal hidden md:inline opacity-70">{t.desc}</span>
           </button>
         ))}
       </div>
       <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
         {activeTab==="settings" && "설문 제목·기간·중복방지·GAS URL을 설정합니다. 저장 전 설문 편집 탭에서 문항 제어를 추가할 수 있습니다."}
         {activeTab==="edit" && "Google Form 문항을 불러와 문항별 필수·검증·조건부 이동을 체크만으로 적용합니다. 전부 OFF가 기본이라 안전합니다."}
-        {activeTab==="list" && "등록된 설문을 검색·필터·페이지로 관리합니다. 편집 버튼으로 설정/편집 탭에 불러올 수 있습니다."}
+        {activeTab==="list" && "등록된 설문을 검색·필터·페이지로 관리합니다. 편집 버튼으로 설정/편집 탭에 불러올 수 있습니다. — 필터가 안 보이면 아래 검색/상태 칩의 × 또는 “필터 초기화”를 누르세요."}
       </p>
 
       {/* 공통 안내 */}
@@ -594,9 +605,9 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
         </div>
         {(search || statusFilter!=="all") && (
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {search && <span className="inline-flex items-center gap-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 border dark:border-zinc-700 rounded-full pl-3 pr-1 py-1">검색: “{search}” <button onClick={()=>setSearch("")} className="h-5 w-5 rounded-full bg-white dark:bg-zinc-700 border dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 flex items-center justify-center leading-none">×</button></span>}
-            {statusFilter!=="all" && <span className="inline-flex items-center gap-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 border dark:border-zinc-700 rounded-full pl-3 pr-1 py-1">상태: {statusFilter==="active"?"진행중":statusFilter==="ended"?"종료됨":statusFilter==="draft"?"초안":statusFilter==="demo"?"데모템플릿":statusFilter} <button onClick={()=>setStatusFilter("all")} className="h-5 w-5 rounded-full bg-white dark:bg-zinc-700 border dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 flex items-center justify-center leading-none">×</button></span>}
-            <button onClick={()=>{ setSearch(""); setStatusFilter("all"); }} className="text-xs underline text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white">필터 모두 제거 (Clear Filters)</button>
+            {search && <span className="inline-flex items-center gap-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 border dark:border-zinc-700 rounded-full pl-3 pr-1 py-1">검색: “{search}” <button type="button" onClick={()=>setSearch("")} className="h-5 w-5 rounded-full bg-white dark:bg-zinc-700 border dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 flex items-center justify-center leading-none">×</button></span>}
+            {statusFilter!=="all" && <span className="inline-flex items-center gap-1.5 text-xs bg-zinc-100 dark:bg-zinc-800 border dark:border-zinc-700 rounded-full pl-3 pr-1 py-1">상태: {statusFilter==="active"?"진행중":statusFilter==="ended"?"종료됨":statusFilter==="draft"?"초안":statusFilter==="demo"?"데모템플릿":statusFilter} <button type="button" onClick={()=>setStatusFilter("all")} className="h-5 w-5 rounded-full bg-white dark:bg-zinc-700 border dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 flex items-center justify-center leading-none">×</button></span>}
+            <button type="button" onClick={clearAllFilters} className="text-xs font-semibold underline text-amber-700 dark:text-amber-300 hover:text-amber-900 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-full px-3 py-1">필터 모두 제거 (Clear Filters)</button>
           </div>
         )}
         <div className="mt-4 grid gap-3">
@@ -638,7 +649,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
               </div>
             </div>
           );})}
-          {!loading && filtered.length===0 && <div className="text-center py-6"><p className="text-sm text-zinc-600 dark:text-zinc-400">검색 결과가 없습니다 — No Results. No surveys match the current filters.</p><button onClick={()=>{ setSearch(""); setStatusFilter("all"); }} className="mt-2 text-xs rounded-full border border-zinc-300 dark:border-zinc-700 px-4 py-1.5 bg-white dark:bg-zinc-900 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition">Clear Filters — 필터 초기화</button></div>}
+          {!loading && filtered.length===0 && <div className="text-center py-6"><p className="text-sm text-zinc-600 dark:text-zinc-400">검색 결과가 없습니다 — No Results. No surveys match the current filters.</p><button type="button" onClick={clearAllFilters} className="mt-3 text-sm rounded-full border-2 border-amber-400 bg-amber-500 text-white px-6 py-2 font-semibold hover:bg-amber-600 transition">Clear Filters — 필터 초기화 (클릭 시 전체 보기)</button><p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">제자리면 새로고침(F5) 후 다시 시도 — 브라우저 캐시 문제일 수 있음</p></div>}
           {!loading && surveys.length===0 && <p className="text-sm text-zinc-600 dark:text-zinc-400">아직 설문이 없습니다. 설정 탭에서 생성하세요.</p>}
         </div>
         {totalPages > 1 && (
