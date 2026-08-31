@@ -82,8 +82,36 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         if (j.survey?.logo_url) {
           setLogoUrl(j.survey.logo_url as string);
           setLogoFit((j.survey.logo_fit as string) || "contain");
+        } else {
+          // 데모 6종 즉시 표시 — DB 마이그레이션 전에도 기준 240×240 견본 로고가 보이도록 폴백
+          const DEMO_WITH_LOGO = new Set([
+            "790f4713-0894-49a4-8e93-297f8f68a614",
+            "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
+            "983d0315-4c2c-48cc-81b6-c7da291ed20a",
+            "afb5c989-95c4-4a8b-9846-e63be0d27b09",
+            "e6524f44-b0c7-4897-83c0-d934c5ed5e2a",
+            "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
+          ]);
+          if (DEMO_WITH_LOGO.has(surveyId)) {
+            setLogoUrl("/logos/sampleLogo.png");
+            setLogoFit("contain");
+          }
         }
-      }).catch(()=>{});
+      }).catch(()=>{
+        // 네트워크 실패 시에도 데모는 견본 로고 폴백
+        const DEMO_WITH_LOGO = new Set([
+          "790f4713-0894-49a4-8e93-297f8f68a614",
+          "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f",
+          "983d0315-4c2c-48cc-81b6-c7da291ed20a",
+          "afb5c989-95c4-4a8b-9846-e63be0d27b09",
+          "e6524f44-b0c7-4897-83c0-d934c5ed5e2a",
+          "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
+        ]);
+        if (DEMO_WITH_LOGO.has(surveyId)) {
+          setLogoUrl("/logos/sampleLogo.png");
+          setLogoFit("contain");
+        }
+      });
     } else {
       const demoFields: TaxonomyField[] = [];
       setTaxonomyFields(demoFields);
