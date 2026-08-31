@@ -55,9 +55,15 @@ export default function AdminGate() {
   if (!role) {
     return (
       <div className="mx-auto max-w-md px-6 py-16">
+        <div className="mb-4 flex items-center justify-between text-xs">
+          <a href="/" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white underline">← SurveyForm 홈으로</a>
+          <span className="text-[11px] bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full font-mono">{typeof window!=="undefined" ? window.location.host : ""}/admin</span>
+        </div>
         <div className="border dark:border-zinc-800 rounded-2xl p-6 bg-white dark:bg-zinc-900 shadow">
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-white">관리자 로그인</h1>
-          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">대시보드 접근 시 ID/비밀번호가 필요합니다. 다른 사람의 작동을 방지합니다.</p>
+          <p className="text-[11px] font-semibold tracking-widest bg-zinc-900 dark:bg-white dark:text-black text-white px-2 py-1 rounded-full w-fit">SurveyForm · 관리자 전용</p>
+          <h1 className="mt-3 text-xl font-bold text-zinc-900 dark:text-white">관리자 로그인</h1>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">이 페이지는 <b className="font-mono text-zinc-900 dark:text-white">{typeof window!=="undefined" ? window.location.origin : ""}/admin</b> 입니다. 로컬은 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">http://localhost:3000/admin</code>, 배포는 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">https://your-domain.vercel.app/admin</code> 형태로 같은 도메인 뒤에 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">/admin</code> 을 붙여 접속합니다.</p>
+          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">대시보드 접근 시 ID/비밀번호가 필요합니다. 다른 사람의 작동을 방지합니다.</p>
           <form onSubmit={login} className="mt-6 space-y-3">
             <label className="block text-sm font-medium text-zinc-900 dark:text-white">ID
               <input value={id} onChange={e=>setId(e.target.value)} required placeholder="administrator 또는 supervisor" className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400" />
@@ -76,7 +82,8 @@ export default function AdminGate() {
             <p className="text-zinc-700 dark:text-zinc-300"><b className="text-zinc-900 dark:text-white">Supervisor</b> — 실무 작업용 (설문 생성·조회·보고서 확인). 초기 ID <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">supervisor</code> / PW <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">krids2026@supervisor</code> — 관리자는 Supervisor 계정으로 일상 작업을 하면 더 안전합니다.</p>
             <p className="text-zinc-500 dark:text-zinc-400 mt-2">구글 설문지 폼의 직접 수정(문항 편집)은 관리자 기능과 분리되어 있습니다 — 구글폼은 drive.google.com에서 편집하고, 관리자 대시보드에서는 Form ID만 연결합니다.</p>
           </div>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-500 mt-4">환경변수 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">ADMIN_ID / ADMIN_PASSWORD / SUPERVISOR_ID / SUPERVISOR_PASSWORD</code> 로 변경 가능. 비어 있으면 위 기본값이 사용됩니다.</p>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-500 mt-4">환경변수 <code className="bg-zinc-100 dark:bg-zinc-800 px-1 rounded">ADMIN_ID / ADMIN_PASSWORD / SUPERVISOR_ID / SUPERVISOR_PASSWORD</code> 로 변경 가능. 비어 있으면 위 기본값이 사용됩니다.</p>
+            <p className="mt-3 text-[11px] text-center text-zinc-500 dark:text-zinc-400">현재 접속 주소: <span className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1 rounded">{typeof window!=="undefined" ? window.location.href : ""}</span></p>
         </div>
       </div>
     );
