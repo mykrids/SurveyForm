@@ -537,8 +537,8 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
           <div className="mt-3 grid md:grid-cols-2 gap-3">
             <label className="text-xs font-medium text-zinc-900 dark:text-white">
               로고 이미지 URL 또는 파일 경로 선택
-              <input value={form.logo_url||""} onChange={e=>setForm({...form,logo_url:e.target.value})} placeholder="https://.../logo.png  또는 /logos/sampleLogo.png" className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400" />
-              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">견본: <code className="bg-zinc-100 dark:bg-zinc-700 px-1 rounded">/logos/sampleLogo.png</code> (images/sampleLogo.png 240×239) — URL 직접 입력 또는 오른쪽 파일 선택</span>
+              <input value={form.logo_url||""} onChange={e=>setForm({...form,logo_url:e.target.value})} placeholder="https://.../logo.png  또는 /logos/sampleLogo.gif" className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400" />
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">견본: <code className="bg-zinc-100 dark:bg-zinc-700 px-1 rounded">/logos/sampleLogo.gif</code> (240×240 GIF) — URL 직접 입력 또는 오른쪽 파일 선택</span>
             </label>
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-zinc-900 dark:text-white">파일에서 선택 (자동 240 기준 축소)
@@ -570,7 +570,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
               <div className="flex items-center gap-3">
                 <div className="border border-dashed dark:border-zinc-700 rounded-xl w-[140px] h-[140px] flex items-center justify-center bg-white dark:bg-zinc-900 text-[11px] text-zinc-500 dark:text-zinc-400 text-center p-2">로고 없음<br/>파일 또는 URL을 입력하세요</div>
                 <div>
-                  <button type="button" onClick={()=>setForm({...form,logo_url:"/logos/sampleLogo.png",logo_fit:"contain"})} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 dark:text-white">견본 로고 사용</button>
+                  <button type="button" onClick={()=>setForm({...form,logo_url:"/logos/sampleLogo.gif",logo_fit:"contain"})} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 dark:text-white">견본 로고 사용</button>
                   <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">견본 240×239 (클릭 시 적용)</p>
                 </div>
               </div>
@@ -752,7 +752,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
                   <p className="text-xs font-semibold text-zinc-900 dark:text-white">🏫 로고 편집 — {s.title.slice(0,20)} <span className="text-[11px] font-normal text-zinc-500">기준 240×240 · 큰 이미지 전체 축소</span></p>
                   <div className="mt-2 grid md:grid-cols-2 gap-2">
                     <label className="text-xs dark:text-white">이미지 URL
-                      <input value={logoEditUrl} onChange={e=>setLogoEditUrl(e.target.value)} placeholder="/logos/sampleLogo.png 또는 https://..." className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-xs" />
+                      <input value={logoEditUrl} onChange={e=>setLogoEditUrl(e.target.value)} placeholder="/logos/sampleLogo.gif 또는 https://..." className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-xs" />
                     </label>
                     <label className="text-xs dark:text-white">맞춤 모드
                       <select value={logoEditFit} onChange={e=>setLogoEditFit(e.target.value)} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-xs">
@@ -767,7 +767,7 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
                       파일 선택
                       <input type="file" accept="image/*" className="hidden" onChange={e=>handleLogoFile(e,"list")} />
                     </label>
-                    <button type="button" onClick={()=>setLogoEditUrl("/logos/sampleLogo.png")} className="text-xs text-zinc-600 dark:text-zinc-400 underline">견본 사용</button>
+                    <button type="button" onClick={()=>setLogoEditUrl("/logos/sampleLogo.gif")} className="text-xs text-zinc-600 dark:text-zinc-400 underline">견본 사용</button>
                     {logoEditUrl && <div className="ml-2 border dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 p-1"><img src={logoEditUrl} alt="preview" className="block" style={logoEditFit==="height_fixed" ? {height: 40, width:"auto", objectFit:"contain"} : logoEditFit==="width_fixed" ? {width: 40, height:"auto", objectFit:"contain"} : {maxWidth: 60, maxHeight: 40, objectFit:"contain"}} onError={e=> (e.target as HTMLImageElement).style.display='none'} /></div>}
                   </div>
                   <div className="mt-3 flex gap-2">

@@ -93,7 +93,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
             "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
           ]);
           if (DEMO_WITH_LOGO.has(surveyId)) {
-            setLogoUrl("/logos/sampleLogo.png");
+            setLogoUrl("/logos/sampleLogo.gif");
             setLogoFit("contain");
           }
         }
@@ -108,7 +108,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
           "18bcc7b5-e1b7-4915-a9a8-ca3711af895f",
         ]);
         if (DEMO_WITH_LOGO.has(surveyId)) {
-          setLogoUrl("/logos/sampleLogo.png");
+          setLogoUrl("/logos/sampleLogo.gif");
           setLogoFit("contain");
         }
       });
