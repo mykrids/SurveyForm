@@ -33,5 +33,7 @@ export type SurveyRow = {
   template_order?: number | null;
   taxonomy_fields?: unknown;
   question_overrides?: unknown;
+  logo_url?: string | null;
+  logo_fit?: string | null;
   created_at?: string;
 };

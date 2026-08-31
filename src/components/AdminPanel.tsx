@@ -25,6 +25,8 @@ type Survey = {
   template_order?: number | null;
   taxonomy_fields?: TaxonomyField[];
   question_overrides?: QuestionOverrides;
+  logo_url?: string | null;
+  logo_fit?: string | null;
   created_at?: string;
 };
 
@@ -70,6 +72,8 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
     admin_email: CURRENT_VALUES.adminEmail,
     taxonomy_fields: [],
     question_overrides: {},
+    logo_url: "",
+    logo_fit: "contain",
   });
   const [msg, setMsg] = useState("");
   const [newTaxLabel, setNewTaxLabel] = useState("");
@@ -88,6 +92,11 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
   const [templateModal, setTemplateModal] = useState<Survey | null>(null);
   const [templateCategory, setTemplateCategory] = useState("Education");
   const [templateColor, setTemplateColor] = useState("bg-violet-500");
+  // 로고 편집 (설정 탭 + 목록 탭 공용)
+  const [logoEditId, setLogoEditId] = useState<string | null>(null);
+  const [logoEditUrl, setLogoEditUrl] = useState("");
+  const [logoEditFit, setLogoEditFit] = useState("contain");
+  const [logoBusy, setLogoBusy] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -168,6 +177,38 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
     updateOverride(qid, { validations: vals });
   }
 
+  function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>, target: "form" | "list") {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { setMsg("오류: 이미지 파일만 선택하세요 (PNG/JPG/WebP)"); return; }
+    if (file.size > 2 * 1024 * 1024) { setMsg("오류: 2MB 이하 이미지만 가능 — 큰 이미지는 압축 후 업로드하세요"); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      if (target === "form") setForm(prev => ({ ...prev, logo_url: dataUrl }));
+      else setLogoEditUrl(dataUrl);
+      setMsg(`로고 파일 로드됨: ${file.name} (${(file.size/1024).toFixed(0)}KB) — 기준 240×240에 맞춰 자동 축소됩니다`);
+    };
+    reader.onerror = () => setMsg("오류: 파일 읽기 실패");
+    reader.readAsDataURL(file);
+    // allow re-select same file
+    e.target.value = "";
+  }
+
+  async function saveLogoForId(id: string, url: string, fit: string) {
+    setLogoBusy(true);
+    try {
+      const payload: Record<string, unknown> = { id, logo_url: url ? url.trim() : null, logo_fit: fit };
+      const r = await fetch("/api/admin/surveys", { method: "PUT", headers: { "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+      const j = await r.json();
+      if (!r.ok) { setMsg(`로고 저장 오류: ${j.error || r.status}`); return; }
+      setMsg(j.warning ? `로고 저장됨(경고: ${j.warning})` : "로고 저장됨 — 설문 상단 중앙에 표시됩니다");
+      setLogoEditId(null);
+      load();
+    } catch (err) { setMsg(`로고 저장 실패: ${String(err)}`); }
+    finally { setLogoBusy(false); }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (form.admin_email) {
@@ -182,13 +223,17 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
       const err = validateOverrides(form.question_overrides);
       if (err) { setMsg(`오류: 문항 설정 오류 — ${err}`); return; }
     }
+    if (form.logo_url && form.logo_url.trim() && form.logo_url.trim().length > 500000) {
+      setMsg("오류: 로고 이미지가 너무 큽니다 (500KB 제한) — 240×240 권장, 2MB 이하로 압축하세요");
+      return;
+    }
     setMsg("저장 중…");
     const r = await fetch("/api/admin/surveys", { method: "POST", headers: { "Content-Type":"application/json" }, body: JSON.stringify(form) });
     const j = await r.json();
     if (!r.ok) setMsg(`오류: ${j.error || r.status}`);
     else {
-      setMsg("저장 완료 — 응답 페이지 링크가 아래 목록에 생성되었습니다.");
-      setForm({ title:"", form_id:"", start_at:"", end_at:"", report_delay_hours:1, duplicate_check_type:"none", end_message_preset:"1", gas_webapp_url: CURRENT_VALUES.gasUrl, admin_email: CURRENT_VALUES.adminEmail, taxonomy_fields: [], question_overrides: {} });
+      setMsg(j.warning ? `저장 완료(경고: ${j.warning})` : "저장 완료 — 응답 페이지 링크가 아래 목록에 생성되었습니다.");
+      setForm({ title:"", form_id:"", start_at:"", end_at:"", report_delay_hours:1, duplicate_check_type:"none", end_message_preset:"1", gas_webapp_url: CURRENT_VALUES.gasUrl, admin_email: CURRENT_VALUES.adminEmail, taxonomy_fields: [], question_overrides: {}, logo_url: "", logo_fit: "contain" });
       setFetchedQuestions(null); setFetchStatus("");
       load();
       setActiveTab("list");
@@ -208,6 +253,8 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
       admin_email: s.admin_email,
       taxonomy_fields: s.taxonomy_fields || [],
       question_overrides: s.question_overrides || {},
+      logo_url: s.logo_url || "",
+      logo_fit: s.logo_fit || "contain",
     });
     setFetchedQuestions(null);
     setFetchStatus("기존 설문을 불러왔습니다 — Form ID로 문항을 다시 불러와 편집하세요");
@@ -483,6 +530,54 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             <span className="text-xs text-zinc-500 dark:text-zinc-400">보고서 PDF가 이 메일로 자동 발송됩니다</span>
           )}
         </label>
+        {/* 대학 로고 — 설문 제목 상단 중앙 삽입 */}
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 p-4">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">🏫 대학 로고 (제목 상단 중앙) <span className="text-xs font-normal text-zinc-500 dark:text-zinc-400">권장 240×240px · 모든 설문(6데모+실설문) 공통 적용</span></h3>
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">설문을 열면 제목 위에 대학 로고가 중앙에 표시됩니다. 큰 이미지는 기준 크기로 자동 축소되며, 가로가 긴 로고는 아래 맞춤 모드로 방향을 선택하세요.</p>
+          <div className="mt-3 grid md:grid-cols-2 gap-3">
+            <label className="text-xs font-medium text-zinc-900 dark:text-white">
+              로고 이미지 URL 또는 파일 경로 선택
+              <input value={form.logo_url||""} onChange={e=>setForm({...form,logo_url:e.target.value})} placeholder="https://.../logo.png  또는 /logos/sampleLogo.png" className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder:text-zinc-400" />
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-400">견본: <code className="bg-zinc-100 dark:bg-zinc-700 px-1 rounded">/logos/sampleLogo.png</code> (images/sampleLogo.png 240×239) — URL 직접 입력 또는 오른쪽 파일 선택</span>
+            </label>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-zinc-900 dark:text-white">파일에서 선택 (자동 240 기준 축소)
+                <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={e=>handleLogoFile(e,"form")} className="mt-1 w-full text-xs border border-zinc-300 dark:border-zinc-700 rounded-lg px-2 py-1.5 bg-white dark:bg-zinc-800 file:mr-2 file:rounded-full file:border-0 file:bg-zinc-900 dark:file:bg-white file:text-white dark:file:text-black file:px-3 file:py-1 file:text-xs" />
+              </label>
+              <label className="text-xs font-medium text-zinc-900 dark:text-white">맞춤 모드 (방향 선택)
+                <select value={form.logo_fit||"contain"} onChange={e=>setForm({...form,logo_fit:e.target.value})} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-2 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white">
+                  <option value="contain">240×240 안에 맞춤 (기본 — 긴 쪽 240에 맞춰 전체 축소)</option>
+                  <option value="height_fixed">세로 240 고정 (가로 길어짐 허용 — 가로가 긴 로고)</option>
+                  <option value="width_fixed">가로 240 고정 (세로 길어짐 허용 — 세로가 긴 로고)</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            {form.logo_url ? (
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="border dark:border-zinc-700 rounded-xl bg-white dark:bg-zinc-900 p-2 flex items-center justify-center shrink-0" style={{width: 140, height: 140}}>
+                  {/* 미리보기: 기준 240을 120으로 축소 미리보기 */}
+                  <img src={form.logo_url} alt="로고 미리보기" onError={e=>{ (e.target as HTMLImageElement).style.display='none'; }} className="block" style={form.logo_fit==="height_fixed" ? {height: 80, width: "auto", maxWidth: 120, objectFit:"contain"} : form.logo_fit==="width_fixed" ? {width: 120, height: "auto", maxHeight: 80, objectFit:"contain"} : {maxWidth: 120, maxHeight: 80, width:"auto", height:"auto", objectFit:"contain"}} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-zinc-900 dark:text-white truncate">미리보기 — {form.logo_fit==="contain" ? "240×240 contain" : form.logo_fit==="height_fixed" ? "세로 240 고정" : "가로 240 고정"}</p>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 break-all">URL: {form.logo_url.slice(0,60)}{form.logo_url.length>60?"…":""}</p>
+                  <button type="button" onClick={()=>setForm({...form,logo_url:""})} className="mt-1 text-xs text-red-600 dark:text-red-400 underline">로고 제거</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="border border-dashed dark:border-zinc-700 rounded-xl w-[140px] h-[140px] flex items-center justify-center bg-white dark:bg-zinc-900 text-[11px] text-zinc-500 dark:text-zinc-400 text-center p-2">로고 없음<br/>파일 또는 URL을 입력하세요</div>
+                <div>
+                  <button type="button" onClick={()=>setForm({...form,logo_url:"/logos/sampleLogo.png",logo_fit:"contain"})} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 dark:text-white">견본 로고 사용</button>
+                  <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">견본 240×239 (클릭 시 적용)</p>
+                </div>
+              </div>
+            )}
+            <span className="ml-auto hidden md:block text-[11px] text-zinc-500 dark:text-zinc-400">기준 240px · 큰 이미지 전체 축소 · 투명 PNG 권장</span>
+          </div>
+        </div>
         <div className="flex flex-wrap gap-3 items-center">
           <button type="submit" className="rounded-full bg-black dark:bg-white dark:text-black text-white px-6 py-2 text-sm font-medium hover:bg-zinc-800 dark:hover:bg-zinc-200 transition">설문 저장</button>
           <button type="button" onClick={()=>setActiveTab("edit")} className="rounded-full border border-zinc-300 dark:border-zinc-700 px-5 py-2 text-sm dark:text-white">다음: 설문 편집 →</button>
@@ -632,10 +727,16 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
                   <p className="text-xs text-zinc-600 dark:text-zinc-400 truncate">Form: {s.form_id||"—"} · GAS: {s.gas_webapp_url ? s.gas_webapp_url.slice(0,40)+"…" : "—"}</p>
                   {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-xs text-violet-600 dark:text-violet-300 mt-1">분류: {s.taxonomy_fields.map((f: TaxonomyField)=>`${f.label}(${f.key})${f.hidden?"·숨김":""}`).join(", ")}</p>}
                   {s.question_overrides && Object.keys(s.question_overrides).length>0 && <p className="text-[11px] text-blue-600 dark:text-blue-300">문항제어 {Object.keys(s.question_overrides).length}개 · {Object.values(s.question_overrides).filter(v=>v.branchEnabled).length}개 분기</p>}
+                  {s.logo_url && <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-1 flex items-center gap-1">🏫 로고: <span className="truncate max-w-[180px]">{s.logo_url.slice(0,32)}{s.logo_url.length>32?"…":""}</span> <span className="px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-700 text-[10px]">{s.logo_fit==="height_fixed"?"세로240":s.logo_fit==="width_fixed"?"가로240":"240×240"}</span></p>}
                 </div>
                 <div className="flex gap-2 self-start flex-wrap">
-                  <button onClick={()=>loadToEdit(s)} disabled={isDemo} title={isDemo ? "데모템플릿은 편집 불가 — 복제 후 사용" : "설정/편집 탭으로 불러오기"} className={`text-xs border rounded-full px-3 py-1 ${isDemo ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-700 cursor-not-allowed" : "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-700 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition"}`}>편집 불러오기</button>
+                  <button onClick={()=>loadToEdit(s)} disabled={isDemo && false} title={isDemo ? "로고는 목록에서 바로 수정 가능 — 전체 편집은 복제 후" : "설정/편집 탭으로 불러오기"} className={`text-xs border rounded-full px-3 py-1 ${isDemo && false ? "bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 border-zinc-200 dark:border-zinc-700 cursor-not-allowed" : "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white border-zinc-300 dark:border-zinc-700 hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition"}`}>편집 불러오기</button>
                   <a href={`/s/${s.id}`} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition">응답 페이지</a>
+                  <button onClick={()=>{
+                    setLogoEditId(s.id);
+                    setLogoEditUrl(s.logo_url || "");
+                    setLogoEditFit(s.logo_fit || "contain");
+                  }} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white hover:bg-zinc-900 hover:text-white dark:hover:bg-white dark:hover:text-zinc-900 transition">🏫 로고</button>
                   {canPromote && (
                     isTemplate ? (
                       <button onClick={()=>openTemplateModal(s)} className="text-xs border border-violet-300 dark:border-violet-700 rounded-full px-3 py-1 bg-violet-600 text-white hover:bg-violet-700 transition">★ 해제</button>
@@ -646,6 +747,36 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
                 </div>
               </div>
               {s.taxonomy_fields && s.taxonomy_fields.length>0 && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-2 break-all">링크 예: /s/{s.id}?{s.taxonomy_fields.map((f: TaxonomyField)=>`${f.key}=값`).join("&")}</p>}
+              {logoEditId===s.id && (
+                <div className="mt-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-3">
+                  <p className="text-xs font-semibold text-zinc-900 dark:text-white">🏫 로고 편집 — {s.title.slice(0,20)} <span className="text-[11px] font-normal text-zinc-500">기준 240×240 · 큰 이미지 전체 축소</span></p>
+                  <div className="mt-2 grid md:grid-cols-2 gap-2">
+                    <label className="text-xs dark:text-white">이미지 URL
+                      <input value={logoEditUrl} onChange={e=>setLogoEditUrl(e.target.value)} placeholder="/logos/sampleLogo.png 또는 https://..." className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-xs" />
+                    </label>
+                    <label className="text-xs dark:text-white">맞춤 모드
+                      <select value={logoEditFit} onChange={e=>setLogoEditFit(e.target.value)} className="mt-1 w-full border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-xs">
+                        <option value="contain">240×240 안에 맞춤 (기본)</option>
+                        <option value="height_fixed">세로 240 고정 (가로 길어짐 허용)</option>
+                        <option value="width_fixed">가로 240 고정 (세로 길어짐 허용)</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mt-2 flex gap-2 items-center">
+                    <label className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-3 py-1 cursor-pointer bg-zinc-50 dark:bg-zinc-800 dark:text-white">
+                      파일 선택
+                      <input type="file" accept="image/*" className="hidden" onChange={e=>handleLogoFile(e,"list")} />
+                    </label>
+                    <button type="button" onClick={()=>setLogoEditUrl("/logos/sampleLogo.png")} className="text-xs text-zinc-600 dark:text-zinc-400 underline">견본 사용</button>
+                    {logoEditUrl && <div className="ml-2 border dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-900 p-1"><img src={logoEditUrl} alt="preview" className="block" style={logoEditFit==="height_fixed" ? {height: 40, width:"auto", objectFit:"contain"} : logoEditFit==="width_fixed" ? {width: 40, height:"auto", objectFit:"contain"} : {maxWidth: 60, maxHeight: 40, objectFit:"contain"}} onError={e=> (e.target as HTMLImageElement).style.display='none'} /></div>}
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button disabled={logoBusy} onClick={()=>saveLogoForId(s.id, logoEditUrl, logoEditFit)} className="text-xs rounded-full bg-black dark:bg-white dark:text-black text-white px-4 py-1.5 font-medium disabled:opacity-50">{logoBusy?"저장 중…":"저장"}</button>
+                    <button disabled={logoBusy} onClick={()=>{ setLogoEditId(null); setLogoEditUrl(""); }} className="text-xs border border-zinc-300 dark:border-zinc-700 rounded-full px-4 py-1.5 dark:text-white">취소</button>
+                    {s.logo_url && <button disabled={logoBusy} onClick={()=>saveLogoForId(s.id, "", "contain")} className="text-xs text-red-600 dark:text-red-400 underline">로고 제거</button>}
+                  </div>
+                </div>
+              )}
               </div>
             </div>
           );})}

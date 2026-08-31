@@ -26,6 +26,8 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   const [done, setDone] = useState<{ presetLabel: string; presetBody: string } | null>(null);
   const [page, setPage] = useState(0);
   const [visited, setVisited] = useState<Set<number>>(()=> new Set([0]));
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoFit, setLogoFit] = useState<string>("contain");
 
   useEffect(()=>{
     fetch(`/api/forms/${surveyId}`).then(r=>r.json()).then(j=>{
@@ -50,7 +52,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
       }
       if (j.warning && !j.warning.includes("지원되지 않는 문항")) setStatus(j.warning);
     }).catch(()=>setStatus("폼 로드 실패"));
-    // taxonomy + question_overrides + title meta
+    // taxonomy + question_overrides + title meta + logo
     if (surveyId !== "demo") {
       fetch(`/api/surveys/${surveyId}`).then(r=>r.json()).then(j=>{
         if (j.survey?.taxonomy_fields) {
@@ -76,6 +78,10 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
         } else if (surveyId === "6440c1c4-ab8c-42f0-a8c3-1ad731565d6f") {
           // 강의 평가는 항상 쿠키 기반 (개인정보 수집 없음)
           setDuplicateCheckType("cookie");
+        }
+        if (j.survey?.logo_url) {
+          setLogoUrl(j.survey.logo_url as string);
+          setLogoFit((j.survey.logo_fit as string) || "contain");
         }
       }).catch(()=>{});
     } else {
@@ -464,7 +470,24 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
 
       return (
        <div className="mx-auto max-w-[816px] w-full px-6 py-8" style={{maxWidth:816}}>
-         <h1 className="text-2xl font-bold dark:text-white">{form.title}</h1>
+         {logoUrl && (
+           <div className="flex justify-center mb-4">
+             <img
+               src={logoUrl}
+               alt="대학 로고"
+               onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+               className="block"
+               style={
+                 logoFit === "height_fixed"
+                   ? { height: 240, width: "auto", maxWidth: "100%", objectFit: "contain" }
+                   : logoFit === "width_fixed"
+                   ? { width: 240, height: "auto", maxHeight: 240, objectFit: "contain" }
+                   : { maxWidth: 240, maxHeight: 240, width: "auto", height: "auto", objectFit: "contain" }
+               }
+             />
+           </div>
+         )}
+         <h1 className="text-2xl font-bold dark:text-white text-center">{form.title}</h1>
          {form.description && <div className="text-sm text-zinc-600 dark:text-zinc-300 mt-2 whitespace-pre-wrap leading-relaxed space-y-1">{renderDesc(form.description)}</div>}
          {form.unsupported.length>0 && (
           <div className="mt-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-sm text-amber-800 dark:text-amber-200">

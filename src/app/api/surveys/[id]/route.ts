@@ -17,11 +17,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (!found) return NextResponse.json({ error: "설문을 찾을 수 없습니다" }, { status: 404 });
     return NextResponse.json({ survey: found });
   }
-  let { data, error } = await supabase.from("surveys").select("id,title,form_id,taxonomy_fields,question_overrides,start_at,end_at,duplicate_check_type").eq("id", id).single();
-  if (error && (error.message.includes("taxonomy_fields") || error.message.includes("question_overrides"))) {
+  let { data, error } = await supabase.from("surveys").select("id,title,form_id,taxonomy_fields,question_overrides,logo_url,logo_fit,start_at,end_at,duplicate_check_type").eq("id", id).single();
+  if (error && (error.message.includes("taxonomy_fields") || error.message.includes("question_overrides") || error.message.includes("logo_url") || error.message.includes("logo_fit"))) {
     const retry = await supabase.from("surveys").select("id,title,form_id,start_at,end_at,duplicate_check_type").eq("id", id).single();
     if (retry.error || !retry.data) return NextResponse.json({ error: `설문을 찾을 수 없습니다: ${retry.error?.message}` }, { status: 404 });
-    return NextResponse.json({ survey: { ...retry.data, taxonomy_fields: [], question_overrides: {} } });
+    return NextResponse.json({ survey: { ...retry.data, taxonomy_fields: [], question_overrides: {}, logo_url: null, logo_fit: "contain" } });
   }
   if (error || !data) return NextResponse.json({ error: `설문을 찾을 수 없습니다: ${error?.message}` }, { status: 404 });
   return NextResponse.json({ survey: data });

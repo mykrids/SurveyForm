@@ -32,8 +32,11 @@ export async function POST(req: NextRequest) {
   const role = requireAdmin(req);
   if (!role) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 });
   const body = await req.json();
-  const { title, form_id, start_at, end_at, report_delay_hours, duplicate_check_type, end_message_preset, gas_webapp_url, admin_email, taxonomy_fields, question_overrides } = body;
+  const { title, form_id, start_at, end_at, report_delay_hours, duplicate_check_type, end_message_preset, gas_webapp_url, admin_email, taxonomy_fields, question_overrides, logo_url, logo_fit } = body;
   if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });
+  const allowedFits = new Set(["contain", "height_fixed", "width_fixed"]);
+  const normFit = allowedFits.has(logo_fit) ? logo_fit : "contain";
+  const normLogoUrl = typeof logo_url === "string" && logo_url.trim() ? logo_url.trim() : null;
   const taxFields = (taxonomy_fields as TaxonomyField[] | undefined) || [];
   if (taxFields.length > 0) {
     const err = validateTaxonomyFields(taxFields);
@@ -59,6 +62,8 @@ export async function POST(req: NextRequest) {
       report_sent: false, report_sent_at: null, created_at: new Date().toISOString(),
       taxonomy_fields: taxFields,
       question_overrides: qOverrides,
+      logo_url: normLogoUrl,
+      logo_fit: normFit,
     };
     mem.unshift(row);
     return NextResponse.json({ survey: row, warning: "Supabase 미설정 — 메모리에 저장됨 (재시작 시 유실)" });
@@ -76,14 +81,16 @@ export async function POST(req: NextRequest) {
     report_sent: false,
     taxonomy_fields: taxFields,
     question_overrides: qOverrides,
+    logo_url: normLogoUrl,
+    logo_fit: normFit,
   };
   let { data, error } = await supabase.from("surveys").insert(payload).select().single();
-  // Fallback: 프로덕션 DB에 taxonomy_fields/question_overrides 컬럼이 아직 없을 때 (schema cache 오류) — 컬럼 없이 재시도
-  if (error && (error.message.includes("taxonomy_fields") || error.message.includes("question_overrides"))) {
-    const { taxonomy_fields: _omit, question_overrides: _omit2, ...fallbackPayload } = payload;
+  // Fallback: 프로덕션 DB에 taxonomy/question/logo 컬럼이 아직 없을 때 (schema cache 오류) — 컬럼 없이 재시도
+  if (error && (error.message.includes("taxonomy_fields") || error.message.includes("question_overrides") || error.message.includes("logo_url") || error.message.includes("logo_fit"))) {
+    const { taxonomy_fields: _omit, question_overrides: _omit2, logo_url: _l1, logo_fit: _l2, ...fallbackPayload } = payload;
     const retry = await supabase.from("surveys").insert(fallbackPayload).select().single();
     if (retry.error) return NextResponse.json({ error: retry.error.message }, { status: 500 });
-    return NextResponse.json({ survey: retry.data, warning: "taxonomy/overrides 컬럼 없음 — fallback 저장됨. Supabase에서 마이그레이션 필요." });
+    return NextResponse.json({ survey: retry.data, warning: "taxonomy/overrides/logo 컬럼 없음 — fallback 저장됨. Supabase에서 마이그레이션 필요." });
   }
   if (error && error.message.includes("question_overrides")) {
     const { question_overrides: _omit, ...fallbackPayload } = payload;
@@ -93,6 +100,42 @@ export async function POST(req: NextRequest) {
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ survey: data });
+}
+
+export async function PUT(req: NextRequest) {
+  const role = requireAdmin(req);
+  if (!role) return NextResponse.json({ error: "관리자 로그인이 필요합니다." }, { status: 401 });
+  const body = await req.json() as { id?: string; title?: string; form_id?: string | null; start_at?: string | null; end_at?: string | null; logo_url?: string | null; logo_fit?: string | null };
+  const { id, title, form_id, start_at, end_at, logo_url, logo_fit } = body;
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+  const allowedFits = new Set(["contain", "height_fixed", "width_fixed"]);
+  const payload: Record<string, unknown> = {};
+  if (title !== undefined) payload.title = title;
+  if (form_id !== undefined) payload.form_id = form_id;
+  if (start_at !== undefined) payload.start_at = start_at ? new Date(start_at as string).toISOString() : null;
+  if (end_at !== undefined) payload.end_at = end_at ? new Date(end_at as string).toISOString() : null;
+  if (logo_url !== undefined) payload.logo_url = logo_url && String(logo_url).trim() ? String(logo_url).trim() : null;
+  if (logo_fit !== undefined) payload.logo_fit = allowedFits.has(logo_fit as string) ? logo_fit : "contain";
+  if (Object.keys(payload).length === 0) return NextResponse.json({ error: "업데이트할 필드가 없습니다." }, { status: 400 });
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    const idx = mem.findIndex(r => (r.id as string) === id);
+    if (idx === -1) return NextResponse.json({ error: "설문을 찾을 수 없습니다." }, { status: 404 });
+    const row = mem[idx] as Record<string, unknown>;
+    Object.assign(row, payload);
+    return NextResponse.json({ ok: true, survey: row });
+  }
+  // logo columns may not exist yet -> fallback without them
+  let { data, error } = await supabase.from("surveys").update(payload).eq("id", id).select().single();
+  if (error && (error.message.includes("logo_url") || error.message.includes("logo_fit"))) {
+    const { logo_url: _l1, logo_fit: _l2, ...fallback } = payload;
+    const r2 = await supabase.from("surveys").update(fallback).eq("id", id).select().single();
+    if (r2.error) return NextResponse.json({ error: r2.error.message }, { status: 500 });
+    return NextResponse.json({ ok: true, survey: r2.data, warning: "logo 컬럼 없음 — 마이그레이션 필요. supabase/migrations/20260901_add_logo_columns.sql 실행하세요." });
+  }
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, survey: data });
 }
 
 export async function PATCH(req: NextRequest) {

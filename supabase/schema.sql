@@ -18,6 +18,8 @@ create table if not exists surveys (
   template_category text,
   template_color text,
   template_order int,
+  logo_url text,
+  logo_fit text not null default 'contain' check (logo_fit in ('contain','height_fixed','width_fixed')),
   created_at timestamptz not null default now()
 );
 
