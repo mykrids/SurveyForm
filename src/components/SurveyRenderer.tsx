@@ -293,7 +293,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
           const points = [0, ...breaks, effQ.length];
           return points.slice(0, -1).map((s, i) => effQ.slice(s, points[i + 1]));
         }
-        const chunk = 5;
+        const chunk = surveyId === EDU_COURSE_SURVEY_ID ? 10 : 5;
         const res: ParsedForm["questions"][] = [];
         for (let i = 0; i < effQ.length; i += chunk) res.push(effQ.slice(i, i + chunk));
         return res.length ? res : [effQ];
@@ -459,6 +459,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
     }
 
   // 페이지네이션: 섹션이 있으면 섹션 우선, 없으면 5문항씩 — 교육과정 합성 문항 포함
+  // 교육신청서는 6문항을 한 페이지에 표시해 2페이지 분할로 인한 누락 오해를 방지 (사용자 요청: 7개 항목 한눈에)
   const pages: ParsedForm["questions"][] = (() => {
     if (!form) return [];
     const eff = getEffectiveQuestions();
@@ -467,7 +468,7 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
       const points = [0, ...breaks, eff.length];
       return points.slice(0, -1).map((s, i) => eff.slice(s, points[i + 1]));
     }
-    const chunk = 5;
+    const chunk = surveyId === EDU_COURSE_SURVEY_ID ? 10 : 5;
     const res: ParsedForm["questions"][] = [];
     for (let i = 0; i < eff.length; i += chunk) res.push(eff.slice(i, i + chunk));
     return res.length ? res : [eff];

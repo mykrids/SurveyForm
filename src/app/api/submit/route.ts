@@ -168,14 +168,14 @@ export async function POST(req: NextRequest) {
     return overrides;
   }
   if (parsedQuestions && parsedForVal) {
-    // reachable 페이지 시뮬레이션으로 건너뛴 문항 제외
+    // reachable 페이지 시뮬레이션으로 건너뛴 문항 제외 — 교육신청서는 한 페이지에 6문항 모두 표시
     const breaks = parsedForVal.sectionBreaks;
     const allPages: typeof parsedQuestions[] = (() => {
       if (breaks && breaks.length > 0) {
         const points = [0, ...breaks, parsedForVal!.questions.length];
         return points.slice(0, -1).map((s, i) => parsedForVal!.questions.slice(s, points[i+1]).map(q=> ({ id: q.id, title: q.title, required: q.required, type: q.type, gridRows: (q as unknown as { gridRows?: { id: string; title: string }[] }).gridRows })) as typeof parsedQuestions);
       }
-      const chunk = 5;
+      const chunk = surveyId === "18bcc7b5-e1b7-4915-a9a8-ca3711af895f" ? 10 : 5;
       const res: typeof parsedQuestions[] = [];
       for (let i = 0; i < parsedQuestions!.length; i += chunk) res.push(parsedQuestions!.slice(i, i+chunk) as typeof parsedQuestions);
       return res.length ? res : [parsedQuestions!];
