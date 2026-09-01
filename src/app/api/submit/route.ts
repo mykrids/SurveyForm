@@ -95,6 +95,12 @@ export async function POST(req: NextRequest) {
             const parsed = parseGoogleFormResponse(formIdForVal, j);
             parsedForVal = parsed;
             parsedQuestions = parsed.questions.map(q => ({ id: q.id, title: q.title, required: q.required, type: q.type, gridRows: (q as unknown as { gridRows?: { id: string; title: string }[] }).gridRows }));
+            // 폼 내부 중복 이메일/동의는 전역 이메일/동의로 대체 — 클라이언트와 동일하게 필터
+            if (surveyId === "18bcc7b5-e1b7-4915-a9a8-ca3711af895f" && parsedQuestions && parsedForVal) {
+              const eduExcluded = new Set(["신청 결과 및 교육 안내사항을 받을 이메일을 입력해 주세요.", "개인정보 수집·이용 동의"]);
+              parsedQuestions = parsedQuestions.filter(q => !eduExcluded.has(q.title.trim()));
+              parsedForVal.questions = parsedForVal.questions.filter(q => !eduExcluded.has(q.title.trim()));
+            }
             // 교육과정 선택 합성 문항 — 폼에 과정 선택이 없어 안내와 불일치하므로 서버 검증에도 주입 (클라이언트와 동일 ID)
             if (surveyId === "18bcc7b5-e1b7-4915-a9a8-ca3711af895f" && parsedQuestions && parsedForVal) {
               const synId = "syn_course_edu_18bcc7b5";

@@ -204,10 +204,19 @@ export default function SurveyRenderer({ surveyId }: { surveyId: string }) {
   };
   function getEffectiveQuestions(): ParsedQuestion[] {
     if (!form) return [];
-    if (surveyId !== EDU_COURSE_SURVEY_ID) return form.questions;
-    if (form.questions.some(q => q.id === EDU_COURSE_QUESTION_ID)) return form.questions;
-    // 연락처(인덱스 3) 다음, 이메일(인덱스 4) 전에 삽입 — 기존 순서 유지
-    const arr = [...form.questions];
+    // 폼 내부 중복 이메일/동의는 전역 이메일/동의로 대체하므로 숨김 (원하는 7개 항목과 일치시키기 위해)
+    const EDU_EXCLUDED = new Set([
+      "신청 결과 및 교육 안내사항을 받을 이메일을 입력해 주세요.",
+      "개인정보 수집·이용 동의",
+    ]);
+    let base = form.questions;
+    if (surveyId === EDU_COURSE_SURVEY_ID) {
+      base = base.filter(q => !EDU_EXCLUDED.has(q.title.trim()));
+    }
+    if (surveyId !== EDU_COURSE_SURVEY_ID) return base;
+    if (base.some(q => q.id === EDU_COURSE_QUESTION_ID)) return base;
+    // 연락처 다음(필터 후 인덱스 3)에 희망 과정 삽입 — 최종 순서: 신청자구분/성명/소속/연락처/희망과정/교육신청목적
+    const arr = [...base];
     const insertAt = Math.min(4, arr.length);
     arr.splice(insertAt, 0, eduCourseQuestion);
     return arr;
