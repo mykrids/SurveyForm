@@ -95,6 +95,18 @@ export async function POST(req: NextRequest) {
             const parsed = parseGoogleFormResponse(formIdForVal, j);
             parsedForVal = parsed;
             parsedQuestions = parsed.questions.map(q => ({ id: q.id, title: q.title, required: q.required, type: q.type, gridRows: (q as unknown as { gridRows?: { id: string; title: string }[] }).gridRows }));
+            // 교육과정 선택 합성 문항 — 폼에 과정 선택이 없어 안내와 불일치하므로 서버 검증에도 주입 (클라이언트와 동일 ID)
+            if (surveyId === "18bcc7b5-e1b7-4915-a9a8-ca3711af895f" && parsedQuestions && parsedForVal) {
+              const synId = "syn_course_edu_18bcc7b5";
+              if (!parsedQuestions.some(q => q.id === synId)) {
+                const synQ = { id: synId, title: "희망 교육과정 선택", required: true, type: "RADIO" } as typeof parsedQuestions[number];
+                const insertAt = Math.min(4, parsedQuestions.length);
+                parsedQuestions.splice(insertAt, 0, synQ);
+                // parsedForVal에도 동일 위치에 주입 (검증·페이지 계산용)
+                const synFull = { id: synId, title: "희망 교육과정 선택", type: "RADIO", required: true, rawType: "RADIO", options: ["교육과정 ① 산업체 대상 AI 실무교육 (2026.09.15 14:00~17:00)", "교육과정 ② 생성형 AI(ChatGPT) 업무 활용 (2026.09.22 14:00~17:00)"] } as unknown as ParsedForm["questions"][number];
+                parsedForVal.questions.splice(insertAt, 0, synFull);
+              }
+            }
             // 구글 폼의 goToSectionId 분기 자동 추론 — DB question_overrides가 비어있어도 건너뛴 문항 검증 제외 (실수 방지)
             if (Object.keys(questionOverrides).length === 0 && j.items) {
               const inferred = inferBranchFromRaw(j as Record<string, unknown>, parsed);
@@ -148,14 +160,6 @@ export async function POST(req: NextRequest) {
       }
     }
     return overrides;
-  }
-  // 교육신청서 등 삭제 요청 문항 — 데모/실사용 공통 검증 제외
-  const SUBMIT_EXCLUDED = new Set(["신청 결과 및 교육 안내사항을 받을 이메일을 입력해 주세요.", "개인정보 수집·이용 동의"]);
-  if (parsedQuestions) {
-    parsedQuestions = parsedQuestions.filter(q => !SUBMIT_EXCLUDED.has(q.title.trim()));
-    if (parsedForVal) {
-      parsedForVal = { ...parsedForVal, questions: parsedForVal.questions.filter(q => !SUBMIT_EXCLUDED.has(q.title.trim())) } as ParsedForm;
-    }
   }
   if (parsedQuestions && parsedForVal) {
     // reachable 페이지 시뮬레이션으로 건너뛴 문항 제외
