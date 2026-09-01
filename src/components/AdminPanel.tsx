@@ -264,7 +264,6 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
   }
 
   const warning = getDuplicateWarning(form.duplicate_check_type || "none");
-  const selectedPreset = END_MESSAGE_PRESETS[form.end_message_preset as keyof typeof END_MESSAGE_PRESETS] || END_MESSAGE_PRESETS["1"];
   const adminEmailTypo = form.admin_email ? checkEmailTypo(form.admin_email) : null;
 
   const filtered = useMemo(()=>{
@@ -455,11 +454,6 @@ export default function AdminPanel({ role }: { role?: "administrator" | "supervi
             </select>
             <span className="text-xs text-zinc-500 dark:text-zinc-400">선택한 번호의 문구가 응답 완료 화면에 표시</span>
           </label>
-        </div>
-        <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 p-3">
-          <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">선택된 종료 메시지 미리보기 — {form.end_message_preset}번</p>
-          <p className="text-sm font-medium text-zinc-900 dark:text-white mt-1">{selectedPreset.label}</p>
-          <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">{selectedPreset.body}</p>
         </div>
         {warning && <p className="text-xs bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-amber-800 dark:text-amber-200">⚠️ {warning}</p>}
         <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800 p-4">

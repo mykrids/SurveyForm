@@ -149,6 +149,14 @@ export async function POST(req: NextRequest) {
     }
     return overrides;
   }
+  // 교육신청서 등 삭제 요청 문항 — 데모/실사용 공통 검증 제외
+  const SUBMIT_EXCLUDED = new Set(["신청 결과 및 교육 안내사항을 받을 이메일을 입력해 주세요.", "개인정보 수집·이용 동의"]);
+  if (parsedQuestions) {
+    parsedQuestions = parsedQuestions.filter(q => !SUBMIT_EXCLUDED.has(q.title.trim()));
+    if (parsedForVal) {
+      parsedForVal = { ...parsedForVal, questions: parsedForVal.questions.filter(q => !SUBMIT_EXCLUDED.has(q.title.trim())) } as ParsedForm;
+    }
+  }
   if (parsedQuestions && parsedForVal) {
     // reachable 페이지 시뮬레이션으로 건너뛴 문항 제외
     const breaks = parsedForVal.sectionBreaks;
